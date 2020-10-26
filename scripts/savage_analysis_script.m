@@ -4,11 +4,9 @@ clc; clear all; close all;
 
 sample = 3; %set path to exp1 (behav) == 1 or exp2 (fmri) == 2, or all == 3 here
 
-data_path = '/Users/lennart/Desktop/savage/github/behavioral_data/'; %set behavioral data path
-%data_path = '...';
+data_path = '...';
 
-addpath(genpath('/Users/lennart/Desktop/Toolboxes/')) %set path to Effect size toolbox (needs to be downloaded at: https://github.com/hhentschke/measures-of-effect-size-toolbox)
-%addpath(genpath('...')) %set path to Effect size toolbox (needs to be downloaded at: https://github.com/hhentschke/measures-of-effect-size-toolbox) 
+addpath(genpath('...')) %set path to Effect size toolbox (needs to be downloaded at: https://github.com/hhentschke/measures-of-effect-size-toolbox) 
 %and Binomial test (https://www.mathworks.com/matlabcentral/fileexchange/24813-mybinomtest-s-n-p-sided)
 
 exclude = [905; 925; 926]; %pilot and participiants who fell asleep during SOC...
@@ -18,40 +16,33 @@ cd(data_path)
 if sample == 1 %behav
    data = dir('savage2LOG_*.mat');
    %load info on explicit knowlegde
-   knowledge = xlsread('/Users/lennart/Desktop/savage/github/exp_knowledge.xlsx');
-   %knowledge = xlsread('/.../exp_knowledge.xlsx');
+   knowledge = xlsread('/.../exp_knowledge.xlsx');
    knowledge = knowledge(1:20,:);
 elseif sample == 2 %fmri
    data = dir('savage_fmriLOG_9*.mat');
    %load info on explicit knowlegde
-   knowledge = xlsread('/Users/lennart/Desktop/savage/github/exp_knowledge.xlsx');
-   %knowledge = xlsread('/.../exp_knowledge.xlsx');
+   knowledge = xlsread('/.../exp_knowledge.xlsx');
    knowledge = knowledge(21:end,:);
    %load US temperatures
-   temperature = xlsread('/Users/lennart/Desktop/savage/github/temperature.xlsx');
+   temperature = xlsread('/.../temperature.xlsx');
+
 elseif sample == 3 %all
    data1 = dir('savage2LOG_*.mat');
    data2 = dir('savage_fmriLOG_9*.mat');
    data = [data1; data2];
    %load info on explicit knowlegde
-   knowledge = xlsread('/Users/lennart/Desktop/savage/github/exp_knowledge.xlsx');
-   %knowledge = xlsread('/.../exp_knowledge.xlsx');
+   knowledge = xlsread('/.../exp_knowledge.xlsx');
    %load US temperatures
-   temperature = xlsread('/Users/lennart/Desktop/savage/github/temperature.xlsx');
-   %knowledge = xlsread('/.../temperature.xlsx');
+   knowledge = xlsread('/.../temperature.xlsx');
    
    %load OFC cluster
-   ofc_cluster = load('/Users/lennart/Desktop/savage/github/roi/cluster_165_ofc.mat'); 
-   %ofc_cluster = load('/.../roi/cluster_165_ofc.mat'); 
+   ofc_cluster = load('/.../roi/cluster_165_ofc.mat'); 
    ofc_cluster = ofc_cluster.avg_ds;
    ofc_cluster = [zeros(20,1); ofc_cluster];
    %load ppi (CS+ vs CS-) mOFC cluster
-   %mofc_cluster = load('/Users/lennart/Desktop/savage/roi/mOFC_conn_meants.txt'); 
-   mofc_cluster = load('/Users/lennart/Desktop/savage/github/roi/mOFC_only_conn_meants.txt'); 
-   %mofc_cluster = load('/.../roi/mOFC_only_conn_meants.txt'); 
+   mofc_cluster = load('/.../roi/mOFC_only_conn_meants.txt'); 
    %load choice data
-   load('/Users/lennart/Desktop/savage/github/choice_bias.mat');
-   %load('/.../choice_bias.mat');
+   load('/.../choice_bias.mat');
    %bias yes/no
    index=choice_bias(:,2);
    %participants showing second order bias
@@ -67,7 +58,7 @@ elseif sample == 3 %all
    foc_index(foc_index<.5) = 0;
    
    
-   load('/Users/lennart/Desktop/savage/github/x.mat');
+   load('/.../github/x.mat');
    decoding = x;
    decoding(:,4) = index;
    index = [zeros(20,1); index];

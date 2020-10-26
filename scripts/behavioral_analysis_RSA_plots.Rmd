@@ -37,8 +37,7 @@ library(reshape2)
 Load the data:
 ```{r}
 
-setwd("/Users/lennart/Desktop/savage/github/csv_data/") #change working dir
-#setwd("/.../csv_data/") #change working dir
+setwd("/.../csv_data/") #change working dir
 
 ds = read.csv("savage_long.csv")  # read from first sheet
 n_sub <- 49

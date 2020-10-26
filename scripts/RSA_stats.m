@@ -5,11 +5,9 @@
     stim = 1; % 1 = FOC, 2 = SOC
     roi = 1; %1 = bil Amygdala, 2 = OFC cluster
     
-    cd '/Users/lennart/Desktop/savage/github/rsa/RSA_matrices'; %set path to rsa matrices
-    %cd '/.../rsa/RSA_matrices'; %set path to rsa matrices
+    cd '/.../rsa/RSA_matrices'; %set path to rsa matrices
 
-    addpath(genpath('/Users/lennart/Desktop/Toolboxes/')) %toolbox for effect size calculation
-    %addpath(genpath('...')) %set path to Effect size toolbox (needs to be downloaded at: https://github.com/hhentschke/measures-of-effect-size-toolbox) 
+    addpath(genpath('...')) %set path to Effect size toolbox (needs to be downloaded at: https://github.com/hhentschke/measures-of-effect-size-toolbox) 
 
     if stim == 1
        if roi == 1
