@@ -399,6 +399,117 @@ for i = 1:length(data)
     percenthighvalkanji4vs5 = highvalkanji4vs5/length(find(forcedchoicekanjis(:,2) == 4 & forcedchoicekanjis(:,3) == 5 | forcedchoicekanjis(:,2) == 5 & forcedchoicekanjis(:,3) == 4));
     results_lures(i,15) = percenthighvalkanji4vs5;
     
+    %% prepare long format data
+    if sum(results(i,1) == exclude) == 0
+        
+        if i < 39 
+            subj = i;
+        else
+            subj = i - 2;
+        end
+        %CS1 choices
+        foc_choice_trials = forcedchoicefractals((forcedchoicefractals(:,2) == 2 | forcedchoicefractals(:,3) == 2),:);
+        for j = 1:size(foc_choice_trials,1)
+            if foc_choice_trials(j,2) == 2 && foc_choice_trials(j,12) == 1 || foc_choice_trials(j,3) == 2 && foc_choice_trials(j,12) == 2
+                CS1_choices(j,:) = 1;
+            else
+                CS1_choices(j,:) = 0;
+            end
+        end
+
+        corr_resp_all_long = [];
+        prev_corr = [];
+        %long format
+        corr_resp_all_long(1:size(foc_choice_trials,1),1) = name; %subID
+        corr_resp_all_long(1:size(foc_choice_trials,1),2) = subj; %subject number
+        corr_resp_all_long(1:size(foc_choice_trials,1),3) = 1; %condition (CS)
+        corr_resp_all_long(1:size(foc_choice_trials,1),4) = CS1_choices; %choices (CS)
+        prev_corr = [0; corr_resp_all_long(1:end-1,4)];%previous trial's correct (0/1)
+        corr_resp_all_long(1:size(foc_choice_trials,1),5) = prev_corr;
+        corr_resp_all_long(1:size(foc_choice_trials,1),6) = foc_choice_trials(:,13);%RT
+
+        corr_resp_all_long_final = [corr_resp_all_long_final; corr_resp_all_long];
+
+        CS1_choices = [];
+
+        %CS2 choices
+        soc_choice_trials = forcedchoicekanjis((forcedchoicekanjis(:,2) == 2 | forcedchoicekanjis(:,3) == 2),:);
+        for j = 1:size(soc_choice_trials,1)
+            if soc_choice_trials(j,2) == 2 && soc_choice_trials(j,12) == 1 || soc_choice_trials(j,3) == 2 && soc_choice_trials(j,12) == 2
+                CS2_choices(j,:) = 1;
+            else
+                CS2_choices(j,:) = 0;
+            end
+        end
+
+        corr_resp_all_long = [];
+        prev_corr = [];
+        %long format
+        corr_resp_all_long(1:size(soc_choice_trials,1),1) = name; %subID
+        corr_resp_all_long(1:size(soc_choice_trials,1),2) = subj; %subject number
+        corr_resp_all_long(1:size(soc_choice_trials,1),3) = 2; %condition (CS)
+        corr_resp_all_long(1:size(soc_choice_trials,1),4) = CS2_choices; %choices (CS)
+        prev_corr = [0; corr_resp_all_long(1:end-1,4)];%previous trial's correct (0/1)
+        corr_resp_all_long(1:size(soc_choice_trials,1),5) = prev_corr;
+        corr_resp_all_long(1:size(soc_choice_trials,1),6) = soc_choice_trials(:,13);%RT
+
+        corr_resp_all_long_final = [corr_resp_all_long_final; corr_resp_all_long];
+
+        corr_resp_all_long = [];
+
+        CS2_choices = [];
+
+         %CS1 lure choices
+        foc_lure_choice_trials = forcedchoicefractals((forcedchoicefractals(:,2) == 3 | forcedchoicefractals(:,3) == 3),:);
+        for j = 1:size(foc_lure_choice_trials,1)
+            if foc_lure_choice_trials(j,2) == 3 && foc_lure_choice_trials(j,12) == 1 || foc_lure_choice_trials(j,3) == 3 && foc_lure_choice_trials(j,12) == 2
+                CS1_lure_choices(j,:) = 1;
+            else
+                CS1_lure_choices(j,:) = 0;
+            end
+        end
+
+        corr_resp_all_long = [];
+        prev_corr = [];
+        %long format
+        corr_resp_all_long(1:size(foc_lure_choice_trials,1),1) = name; %subID
+        corr_resp_all_long(1:size(foc_lure_choice_trials,1),2) = subj; %subject number
+        corr_resp_all_long(1:size(foc_lure_choice_trials,1),3) = 3; %condition (CS)
+        corr_resp_all_long(1:size(foc_lure_choice_trials,1),4) = CS1_lure_choices; %choices (CS)
+        prev_corr = [0; corr_resp_all_long(1:end-1,4)];%previous trial's correct (0/1)
+        corr_resp_all_long(1:size(foc_lure_choice_trials,1),5) = prev_corr;
+        corr_resp_all_long(1:size(foc_lure_choice_trials,1),6) = foc_lure_choice_trials(:,13);%RT
+
+        corr_resp_all_long_final = [corr_resp_all_long_final; corr_resp_all_long];
+
+        CS1_lure_choices = [];
+
+        %CS2 lure choices
+        soc_lure_choice_trials = forcedchoicekanjis((forcedchoicekanjis(:,2) == 3 | forcedchoicekanjis(:,3) == 3),:);
+        for j = 1:size(soc_lure_choice_trials,1)
+            if soc_lure_choice_trials(j,2) == 3 && soc_lure_choice_trials(j,12) == 1 || soc_lure_choice_trials(j,3) == 3 && soc_lure_choice_trials(j,12) == 2
+                CS2_lure_choices(j,:) = 1;
+            else
+                CS2_lure_choices(j,:) = 0;
+            end
+        end
+
+        prev_corr = [];
+        %long format
+        corr_resp_all_long(1:size(soc_lure_choice_trials,1),1) = name; %subID
+        corr_resp_all_long(1:size(soc_lure_choice_trials,1),2) = subj; %subject number
+        corr_resp_all_long(1:size(soc_lure_choice_trials,1),3) = 4; %condition (CS)
+        corr_resp_all_long(1:size(soc_lure_choice_trials,1),4) = CS2_lure_choices; %choices (CS)
+        prev_corr = [0; corr_resp_all_long(1:end-1,4)];%previous trial's correct (0/1)
+        corr_resp_all_long(1:size(soc_lure_choice_trials,1),5) = prev_corr;
+        corr_resp_all_long(1:size(soc_lure_choice_trials,1),6) = soc_lure_choice_trials(:,13);%RT
+
+        corr_resp_all_long_final = [corr_resp_all_long_final; corr_resp_all_long];
+
+        CS2_lure_choices = [];
+    end
+    
+    
     %% Ratings - second-order conditioning (day 2 in fMRI sample)
     
     if isfield(ds,'savage2')
@@ -578,8 +689,8 @@ for i = 1:length(data)
     if sum(results(i,1) == exclude) == 0 && sample == 3
         
         
-       choices(1,:) = CS2plus; %choices of CS1+
-       choices(2,:) = CS1plus; %choices of CS2+
+       choices(1,:) = CS1plus; %choices of CS1+
+       choices(2,:) = CS2plus; %choices of CS2+
        choices(3,:) = CS1neutral; %choices of CS1n
        choices(4,:) = CS2neutral; %choices of CS2n
        
@@ -608,7 +719,11 @@ end
 %     
 % writetable(CS_l,'savage_long.csv','Delimiter',',');
 
-
+% cd /.../MLM
+% varNames = {'SubID','subject', 'CS', 'choice', 'prev_choice', 'RT'};
+% CS_l = array2table(corr_resp_all_long_final,'VariableNames',varNames);
+%         
+% writetable(CS_l,'savage_long_tbt.csv','Delimiter',',')
 
 if sum(exclude) > 0
    results = results(~isnan(results(:,2)),:);
