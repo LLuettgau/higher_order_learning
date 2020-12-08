@@ -1,0 +1,1367 @@
+---
+title: "savage_GLM"
+output: html_document
+---
+
+```{r, SETTINGS-knitr, include=FALSE}
+stopifnot(require(knitr))
+options(width = 90)
+opts_chunk$set(
+  cache = TRUE,
+  comment = NA,
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+Load required packages:
+```{r}
+library(rethinking)
+library(bayestestR)
+library(brms)
+options(mc.cores = parallel::detectCores())
+library(tidyverse)
+theme_set(theme_default())
+library(readr)
+library(tidyr)
+library(Hmisc)
+library(plyr)
+library(RColorBrewer)
+library(reshape2)
+library(bayestestR)
+
+
+```
+
+
+Load the data:
+```{r}
+
+setwd("/Users/lennart/Desktop/savage/MLM/") #change working dir
+
+ds = read.csv("savage_long.csv")  # read from first sheet
+n_sub <- 49
+  
+ds$group <- ifelse( ds$SubID < 900 , 1L , 2L )
+
+ds[,'SubID']<-factor(ds[,'SubID'])
+head(ds, 10)
+
+conditions <- make_conditions(ds, "SubID")
+
+#wide format
+
+ds_wide = read.csv("savage_wide.csv")
+
+#rsa data
+ds_rsa = read.csv("rsa.csv")
+ds_rsa_norm = read.csv("rsa_norm.csv")
+
+#decoding data
+ds_decoding = read.csv("decoding.csv")
+
+ds_decoding1 = read.csv("decoding1.csv")
+ds_decoding2 = read.csv("decoding2.csv")
+
+#behavioral sample
+ds_behav = ds[ which(ds$ofc_acc =='NaN'),]
+ds_behav_wide = ds_wide[ 1:20,]
+  
+#fmri sample
+ds_fmri = ds[ 81:196,]
+ds_fmri_wide = ds_wide[ 21:49,]
+
+
+#tbt data
+ds_tbt = read.csv("savage_long_tbt.csv")  # read from first sheet
+ds_tbt$group <- ifelse( ds_tbt$SubID < 900 , 1L , 2L )
+head(ds_tbt, 10)
+
+
+```
+#Regression model on all CS choice probabilities, trial-by-trial
+```{r}
+# prior trimmed data list
+dat_list <- list(
+  choices = ds_tbt$choice,
+  subject = ds_tbt$subject,
+  CS = ds_tbt$CS
+)
+
+
+all_cs_reg <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a_bar + z[subject]*a_sigma + x[CS]*g_sigma,
+        #hyper-priors
+        z[subject] ~ dnorm( 0 , 1 ),
+        x[CS] ~ dnorm( 0 , 1 ),
+        a_bar ~ dnorm( 0 , 1 ),
+        a_sigma ~ dhalfnorm(  0 , .01 ),
+        g_sigma ~ dhalfnorm(  0 , .01 ),
+        #generated quantities 
+        gq> vector[subject]:a <<- a_bar + z*a_sigma,
+        gq> vector[CS]:g <<- x*g_sigma
+  ) , data=dat_list , chains=4 , iter = 4000, warmup=2000 ,cores = 16, log_lik=TRUE )
+
+
+#sensible prior on probability scale?
+prior <- extract.prior( all_cs_reg , n=1e4 )
+p <- inv_logit( prior$a_mu )
+dens( p , adj=0.1 )
+
+p <- inv_logit( prior$a_sigma )
+dens( p , adj=0.1 )
+
+
+#parameter estimates
+precis( all_cs_reg , depth=2)
+
+#extract posterior samples
+post_cs <- extract.samples( all_cs_reg ) 
+
+#means and HPDIs for CS-specific intercepts
+#CS1
+M_a1 <- mean( inv_logit( post_cs$x[,1] ) ) #posterior mean on probability scale, behavioral sample
+M_a1
+HDI_a1 <- HPDI( inv_logit( post_cs$x[,1]  ) ) #highest posterior density on probability scale, behavioral sample
+HDI_a1
+
+#CS2
+M_a2 <- mean( inv_logit( post_cs$x[,2] ) ) #posterior mean on probability scale, fmri sample
+M_a2
+HDI_a2 <- HPDI( inv_logit( post_cs$x[,2]  ) ) #highest posterior density on probability scale, fmri sample
+HDI_a2
+
+#CS1n
+M_a3 <- mean( inv_logit( post_cs$x[,3] ) ) #posterior mean on probability scale, behavioral sample
+M_a3
+HDI_a3 <- HPDI( inv_logit( post_cs$x[,3]  ) ) #highest posterior density on probability scale, behavioral sample
+HDI_a3
+
+
+#CS2n
+M_a4 <- mean( inv_logit( post_cs$x[,4] ) ) #posterior mean on probability scale, behavioral sample
+M_a4
+HDI_a4 <- HPDI( inv_logit( post_cs$x[,4]  ) ) #highest posterior density on probability scale, behavioral sample
+HDI_a4
+```
+
+
+#Regression model on choice probailities, CS1 - tbt
+```{r}
+ ##CS1
+new_ds_tbt<- ds_tbt[ which(ds_tbt$CS =='1'), ]
+
+# prior trimmed data list
+dat_list <- list(
+  choices = new_ds_tbt$choice,
+  subject = new_ds_tbt$subject,
+  group = new_ds_tbt$group
+)
+
+#####
+#flat regression, no random intercepts
+cs1_reg_flat <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a,
+        a ~ dnorm( 0 , 1 )
+  ) , data=dat_list , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE )
+
+#quality checks, trace and trank plots
+traceplot( cs1_reg_flat )
+trankplot( cs1_reg_flat , n_cols=2 )
+
+#parameter estimates
+precis( cs1_reg_flat , depth=2)
+
+#extract posterior samples
+post_cs1_flat <- extract.samples( cs1_reg_flat ) 
+
+#means and HPDIs for intercept
+M11_a <- mean( inv_logit( post_cs1_flat$a ) ) #posterior mean on probability scale, behavioral sample
+M11_a
+HDI11_a <- HPDI( inv_logit( post_cs1_flat$a  ) ) #highest posterior density on probability scale, behavioral sample
+HDI11_a
+######
+
+#####
+#random intercepts regression
+cs1_reg_rand <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a[subject],
+        a[subject] ~ dnorm( a_mu, a_sigma ),
+        #hyper-priors
+        c(a_mu) ~ dnorm( 0 , 1 ),
+        c(a_sigma) ~ dhalfnorm(  0 , 1 )
+  ) , data=dat_list , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE )
+
+
+# #sensible prior on probability scale?
+# prior <- extract.prior( cs1_reg )
+# p <- inv_logit( prior$a_mu )
+# dens( p , adj=0.1 )
+# 
+# dens( prior$a_sigma , adj=0.1 )
+
+
+#quality checks, trace and trank plots
+traceplot( cs1_reg_rand )
+trankplot( cs1_reg_rand , n_cols=2 )
+
+#parameter estimates
+precis( cs1_reg_rand , depth=2)
+
+#extract posterior samples
+post_cs1 <- extract.samples( cs1_reg_rand ) 
+
+#means and HPDIs for varying intercept 
+M21_a_mu <- mean( inv_logit( post_cs1$a_mu ) ) #posterior mean on probability scale, behavioral sample
+M21_a_mu
+HDI21_a_mu <- HPDI( inv_logit( post_cs1$a_mu ) ) #highest posterior density on probability scale, behavioral sample
+HDI21_a_mu
+
+#find the proportion of the HPDI that is inside the ROPE
+rope(inv_logit( post_cs1$a_mu ), range = c(.45, .55))
+
+plot( precis(cs1_reg_rand,depth=2) ) 
+
+plot_dens_a <- plot(cs1_reg_rand@stanfit, pars=c('a_mu','a'), show_density=T, fill_color = 'skyblue')
+print(plot_dens_a)
+#####
+
+
+#####
+#group model - reparameterized
+cs1_reg_group <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a_mu + x[group]*a_sigma,
+        x[group] ~ dnorm( 0 , 1 ),
+        a_mu ~ dnorm(  0 , 1 ),
+        a_sigma ~ dhalfnorm(  0 , .5 ),
+        #generated quantities
+        gq> vector[group]:a <<- a_mu + x*a_sigma
+  ) , data=dat_list , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE, control = list(adapt_delta = 0.999)  )
+#control = list(adapt_delta = 0.999, stepsize = 1.0, max_treedepth = 20) )
+
+
+#quality checks, trace and trank plots
+traceplot( cs1_reg_group )
+trankplot( cs1_reg_group , n_cols=2 )
+
+#parameter estimates
+precis( cs1_reg_group , depth=2)
+
+#extract posterior samples
+post_cs1_reg_group <- extract.samples( cs1_reg_group ) 
+
+#means and HPDIs for intercept and group-specific intercepts
+M31_a <- mean( inv_logit( post_cs1_reg_group$a_mu ) ) #posterior mean on probability scale, behavioral sample
+M31_a
+HDI31_a <- HPDI( inv_logit( post_cs1_reg_group$a_mu  ) ) #highest posterior density on probability scale, behavioral sample
+HDI31_a
+
+M31_a1 <- mean( inv_logit( post_cs1_reg_group$a[,1] ) ) #posterior mean on probability scale, behavioral sample
+M31_a1
+HDI31_a1 <- HPDI( inv_logit( post_cs1_reg_group$a[,1]  ) ) #highest posterior density on probability scale, behavioral sample
+HDI31_a1
+
+M31_a2 <- mean( inv_logit( post_cs1_reg_group$a[,2] ) ) #posterior mean on probability scale, fmri sample
+M31_a2
+HDI31_a2 <- HPDI( inv_logit( post_cs1_reg_group$a[,2]  ) ) #highest posterior density on probability scale, fmri sample
+HDI31_a2
+
+#means and HPDIs for group difference on intercept
+diff_1 <- post_cs1_reg_group$a[,1] -  post_cs1_reg_group$a[,2]
+diff_p_1 <- inv_logit(post_cs1_reg_group$a[,1])  - inv_logit(post_cs1_reg_group$a[,2])
+
+mean_1_a_diff <- mean(diff_p_1 ) 
+mean_1_a_diff
+HDI_1_a_diff <- HPDI(diff_p_1 ) 
+HDI_1_a_diff
+
+plot_dens_a <- plot(cs1_reg_group@stanfit, pars=c('a_mu','a'), show_density=T, fill_color = 'skyblue')
+print(plot_dens_a)
+#####
+
+
+#####
+#random intercepts and group regression
+cs1_reg_full <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a_bar + z[subject]*a_sigma + 
+                    x[group]*g_sigma,
+        z[subject] ~ dnorm( 0 , 1 ),
+        x[group] ~ dnorm( 0 , 1 ),
+        a_bar ~ dnorm( 0 , 1 ),
+        a_sigma ~ dhalfnorm(  0 , .5 ),
+        g_sigma ~ dhalfnorm(  0 , .5 ),
+        #generated quantities 
+        gq> vector[subject]:a <<- a_bar + z*a_sigma,
+        gq> vector[group]:g <<- x*g_sigma
+  ) , data=dat_list , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE , control = list(adapt_delta = 0.999) )
+
+#control = list(adapt_delta = 0.999) 
+prior <- extract.prior( cs1_reg_full )
+p <- inv_logit( prior$a_bar )
+dens( p , adj=0.1 )
+
+dens( prior$a_sigma , adj=0.1 )
+
+#quality checks, trace and trank plots
+traceplot( cs1_reg_full )
+trankplot( cs1_reg_full , n_cols=2 )
+
+#parameter estimates
+precis( cs1_reg_full , depth=2)
+
+#extract posterior samples
+post_cs1_reg_full <- extract.samples( cs1_reg_full ) 
+
+#means and HPDIs for intercept and group-specific intercepts
+M41_a_mu <- mean( inv_logit( post_cs1_reg_full$a ) ) #posterior mean on probability scale, behavioral sample
+M41_a_mu
+HDI41_a_mu <- HPDI( inv_logit( post_cs1_reg_full$a ) ) #highest posterior density on probability scale, behavioral sample
+HDI41_a_mu
+
+M41_g1 <- mean( inv_logit( post_cs1_reg_full$g[,1]) ) #posterior mean on probability scale, behavioral sample
+M41_g1
+HDI41_g1 <- HPDI( inv_logit( post_cs1_reg_full$g[,1] ) ) #highest posterior density on probability scale, behavioral sample
+HDI41_g1
+
+M41_g2 <- mean( inv_logit( post_cs1_reg_full$g[,2]) ) #posterior mean on probability scale, behavioral sample
+M41_g2
+HDI41_g2 <- HPDI( inv_logit( post_cs1_reg_full$g[,2] ) ) #highest posterior density on probability scale, behavioral sample
+HDI41_g2
+#####
+
+
+
+
+#model comparison
+compare(cs1_reg_flat, cs1_reg_rand, cs1_reg_group, cs1_reg_full, func = PSIS)
+```
+
+
+#Regression model on choice probailities, CS2 - tbt
+```{r}
+ ##CS2
+new_ds_tbt<- ds_tbt[ which(ds_tbt$CS =='2'), ]
+
+# prior trimmed data list
+dat_list2 <- list(
+  choices = new_ds_tbt$choice,
+  subject = new_ds_tbt$subject,
+  group = new_ds_tbt$group
+)
+
+#####
+#flat regression, no random intercepts
+cs2_reg_flat <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a,
+        a ~ dnorm( 0 , 1 )
+  ) , data=dat_list2 , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE )
+
+#quality checks, trace and trank plots
+traceplot( cs2_reg_flat )
+trankplot( cs2_reg_flat , n_cols=2 )
+
+#parameter estimates
+precis( cs2_reg_flat , depth=2)
+
+#extract posterior samples
+post_cs2_flat <- extract.samples( cs2_reg_flat ) 
+
+#means and HPDIs for intercept
+M12_a <- mean( inv_logit( post_cs2_flat$a ) ) #posterior mean on probability scale, behavioral sample
+M12_a
+HDI12_a <- HPDI( inv_logit( post_cs2_flat$a  ) ) #highest posterior density on probability scale, behavioral sample
+HDI12_a
+######
+
+#####
+#random intercepts regression
+cs2_reg_rand <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a[subject],
+        a[subject] ~ dnorm( a_mu, a_sigma ),
+        #hyper-priors
+        c(a_mu) ~ dnorm( 0 , 1 ),
+        c(a_sigma) ~ dhalfnorm(  0 , 1 )
+  ) , data=dat_list2 , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE )
+
+
+# #sensible prior on probability scale?
+# prior <- extract.prior( cs1_reg )
+# p <- inv_logit( prior$a_mu )
+# dens( p , adj=0.1 )
+# 
+# dens( prior$a_sigma , adj=0.1 )
+
+
+#quality checks, trace and trank plots
+traceplot( cs2_reg_rand )
+trankplot( cs2_reg_rand , n_cols=2 )
+
+#parameter estimates
+precis( cs2_reg_rand , depth=2)
+
+#extract posterior samples
+post_cs2 <- extract.samples( cs2_reg_rand ) 
+
+#means and HPDIs for varying intercept 
+M22_a_mu <- mean( inv_logit( post_cs2$a_mu ) ) #posterior mean on probability scale, behavioral sample
+M22_a_mu
+HDI22_a_mu <- HPDI( inv_logit( post_cs2$a_mu ) ) #highest posterior density on probability scale, behavioral sample
+HDI22_a_mu
+
+#find the proportion of the HPDI that is inside the ROPE
+rope(inv_logit( post_cs2$a_mu ), range = c(.45, .55))
+
+plot( precis(cs2_reg_rand,depth=2) ) 
+
+plot_dens_a <- plot(cs2_reg_rand@stanfit, pars=c('a_mu','a'), show_density=T, fill_color = 'skyblue')
+print(plot_dens_a)
+#####
+
+
+#####
+#group model - reparameterized
+cs2_reg_group <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a_mu + x[group]*a_sigma,
+        x[group] ~ dnorm( 0 , 1 ),
+        a_mu ~ dnorm(  0 , 1 ),
+        a_sigma ~ dhalfnorm(  0 , .5 ),
+        #generated quantities
+        gq> vector[group]:a <<- a_mu + x*a_sigma
+  ) , data=dat_list2 , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE, control = list(adapt_delta = 0.999)  )
+#control = list(adapt_delta = 0.999, stepsize = 1.0, max_treedepth = 20) )
+
+
+#quality checks, trace and trank plots
+traceplot( cs2_reg_group )
+trankplot( cs2_reg_group , n_cols=2 )
+
+#parameter estimates
+precis( cs2_reg_group , depth=2)
+
+#extract posterior samples
+post_cs2_reg_group <- extract.samples( cs2_reg_group ) 
+
+#means and HPDIs for intercept and group-specific intercepts
+M32_a <- mean( inv_logit( post_cs2_reg_group$a_mu ) ) #posterior mean on probability scale, behavioral sample
+M32_a
+HDI32_a <- HPDI( inv_logit( post_cs2_reg_group$a_mu  ) ) #highest posterior density on probability scale, behavioral sample
+HDI32_a
+
+M32_a1 <- mean( inv_logit( post_cs2_reg_group$a[,1] ) ) #posterior mean on probability scale, behavioral sample
+M32_a1
+HDI32_a1 <- HPDI( inv_logit( post_cs2_reg_group$a[,1]  ) ) #highest posterior density on probability scale, behavioral sample
+HDI32_a1
+
+M32_a2 <- mean( inv_logit( post_cs2_reg_group$a[,2] ) ) #posterior mean on probability scale, fmri sample
+M32_a2
+HDI32_a2 <- HPDI( inv_logit( post_cs2_reg_group$a[,2]  ) ) #highest posterior density on probability scale, fmri sample
+HDI32_a2
+
+#means and HPDIs for group difference on intercept
+diff_2 <- post_cs2_reg_group$a[,1] -  post_cs2_reg_group$a[,2]
+diff_p_2 <- inv_logit(post_cs2_reg_group$a[,1])  - inv_logit(post_cs2_reg_group$a[,2])
+
+mean_2_a_diff <- mean(diff_p_2 ) 
+mean_2_a_diff
+HDI_2_a_diff <- HPDI(diff_p_2 ) 
+HDI_2_a_diff
+
+plot_dens_a <- plot(cs2_reg_group@stanfit, pars=c('a_mu','a'), show_density=T, fill_color = 'skyblue')
+print(plot_dens_a)
+#####
+
+
+#####
+#random intercepts and group regression
+cs2_reg_full <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a_bar + z[subject]*a_sigma + 
+                    x[group]*g_sigma,
+        z[subject] ~ dnorm( 0 , 1 ),
+        x[group] ~ dnorm( 0 , 1 ),
+        a_bar ~ dnorm( 0 , 1 ),
+        a_sigma ~ dhalfnorm(  0 , .5 ),
+        g_sigma ~ dhalfnorm(  0 , .5 ),
+        #generated quantities 
+        gq> vector[subject]:a <<- a_bar + z*a_sigma,
+        gq> vector[group]:g <<- x*g_sigma
+  ) , data=dat_list2 , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE , control = list(adapt_delta = 0.999) )
+
+#control = list(adapt_delta = 0.999) 
+prior <- extract.prior( cs2_reg_full )
+p <- inv_logit( prior$a_bar )
+dens( p , adj=0.1 )
+
+dens( prior$a_sigma , adj=0.1 )
+
+#quality checks, trace and trank plots
+traceplot( cs2_reg_full )
+trankplot( cs2_reg_full , n_cols=2 )
+
+#parameter estimates
+precis( cs2_reg_full , depth=2)
+
+#extract posterior samples
+post_cs2_reg_full <- extract.samples( cs2_reg_full ) 
+
+#means and HPDIs for intercept and group-specific intercepts
+M42_a_mu <- mean( inv_logit( post_cs2_reg_full$a ) ) #posterior mean on probability scale, behavioral sample
+M42_a_mu
+HDI42_a_mu <- HPDI( inv_logit( post_cs2_reg_full$a ) ) #highest posterior density on probability scale, behavioral sample
+HDI42_a_mu
+
+M42_g1 <- mean( inv_logit( post_cs2_reg_full$g[,1]) ) #posterior mean on probability scale, behavioral sample
+M42_g1
+HDI42_g1 <- HPDI( inv_logit( post_cs2_reg_full$g[,1] ) ) #highest posterior density on probability scale, behavioral sample
+HDI42_g1
+
+M42_g2 <- mean( inv_logit( post_cs2_reg_full$g[,2]) ) #posterior mean on probability scale, behavioral sample
+M42_g2
+HDI42_g2 <- HPDI( inv_logit( post_cs2_reg_full$g[,2] ) ) #highest posterior density on probability scale, behavioral sample
+HDI42_g2
+#####
+
+
+
+
+#model comparison
+compare(cs2_reg_flat, cs2_reg_rand, cs2_reg_group, cs2_reg_full, func = PSIS)
+```
+
+
+
+#Regression model on choice probailities, CS1n - tbt
+```{r}
+ ##CS1
+new_ds_tbt<- ds_tbt[ which(ds_tbt$CS =='3'), ]
+
+# prior trimmed data list
+dat_list3 <- list(
+  choices = new_ds_tbt$choice,
+  subject = new_ds_tbt$subject,
+  group = new_ds_tbt$group
+)
+
+#####
+#flat regression, no random intercepts
+cs3_reg_flat <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a,
+        a ~ dnorm( 0 , 1 )
+  ) , data=dat_list3 , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE )
+
+#quality checks, trace and trank plots
+traceplot( cs3_reg_flat )
+trankplot( cs3_reg_flat , n_cols=2 )
+
+#parameter estimates
+precis( cs3_reg_flat , depth=2)
+
+#extract posterior samples
+post_cs3_flat <- extract.samples( cs3_reg_flat ) 
+
+#means and HPDIs for intercept
+M13_a <- mean( inv_logit( post_cs3_flat$a ) ) #posterior mean on probability scale, behavioral sample
+M13_a
+HDI13_a <- HPDI( inv_logit( post_cs3_flat$a  ) ) #highest posterior density on probability scale, behavioral sample
+HDI13_a
+######
+
+#####
+#random intercepts regression
+cs3_reg_rand <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a[subject],
+        a[subject] ~ dnorm( a_mu, a_sigma ),
+        #hyper-priors
+        c(a_mu) ~ dnorm( 0 , 1 ),
+        c(a_sigma) ~ dhalfnorm(  0 , 1 )
+  ) , data=dat_list3 , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE )
+
+
+# #sensible prior on probability scale?
+# prior <- extract.prior( cs1_reg )
+# p <- inv_logit( prior$a_mu )
+# dens( p , adj=0.1 )
+# 
+# dens( prior$a_sigma , adj=0.1 )
+
+
+#quality checks, trace and trank plots
+traceplot( cs3_reg_rand )
+trankplot( cs3_reg_rand , n_cols=2 )
+
+#parameter estimates
+precis( cs3_reg_rand , depth=2)
+
+#extract posterior samples
+post_cs3 <- extract.samples( cs3_reg_rand ) 
+
+#means and HPDIs for varying intercept 
+M23_a_mu <- mean( inv_logit( post_cs3$a_mu ) ) #posterior mean on probability scale, behavioral sample
+M23_a_mu
+HDI23_a_mu <- HPDI( inv_logit( post_cs3$a_mu ) ) #highest posterior density on probability scale, behavioral sample
+HDI23_a_mu
+
+#find the proportion of the HPDI that is inside the ROPE
+rope(inv_logit( post_cs3$a_mu ), range = c(.45, .55))
+
+plot( precis(cs3_reg_rand,depth=2) ) 
+
+plot_dens_a <- plot(cs3_reg_rand@stanfit, pars=c('a_mu','a'), show_density=T, fill_color = 'skyblue')
+print(plot_dens_a)
+#####
+
+
+#####
+#group model - reparameterized
+cs3_reg_group <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a_mu + x[group]*a_sigma,
+        x[group] ~ dnorm( 0 , 1 ),
+        a_mu ~ dnorm(  0 , 1 ),
+        a_sigma ~ dhalfnorm(  0 , .5 ),
+        #generated quantities
+        gq> vector[group]:a <<- a_mu + x*a_sigma
+  ) , data=dat_list3 , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE, control = list(adapt_delta = 0.999)  )
+#control = list(adapt_delta = 0.999, stepsize = 1.0, max_treedepth = 20) )
+
+
+#quality checks, trace and trank plots
+traceplot( cs3_reg_group )
+trankplot( cs3_reg_group , n_cols=2 )
+
+#parameter estimates
+precis( cs3_reg_group , depth=2)
+
+#extract posterior samples
+post_cs3_reg_group <- extract.samples( cs3_reg_group ) 
+
+#means and HPDIs for intercept and group-specific intercepts
+M33_a <- mean( inv_logit( post_cs3_reg_group$a_mu ) ) #posterior mean on probability scale, behavioral sample
+M33_a
+HDI33_a <- HPDI( inv_logit( post_cs3_reg_group$a_mu  ) ) #highest posterior density on probability scale, behavioral sample
+HDI33_a
+
+M33_a1 <- mean( inv_logit( post_cs3_reg_group$a[,1] ) ) #posterior mean on probability scale, behavioral sample
+M33_a1
+HDI33_a1 <- HPDI( inv_logit( post_cs3_reg_group$a[,1]  ) ) #highest posterior density on probability scale, behavioral sample
+HDI33_a1
+
+M33_a2 <- mean( inv_logit( post_cs3_reg_group$a[,2] ) ) #posterior mean on probability scale, fmri sample
+M33_a2
+HDI33_a2 <- HPDI( inv_logit( post_cs3_reg_group$a[,2]  ) ) #highest posterior density on probability scale, fmri sample
+HDI33_a2
+
+#means and HPDIs for group difference on intercept
+diff_3 <- post_cs3_reg_group$a[,1] -  post_cs3_reg_group$a[,2]
+diff_p_3 <- inv_logit(post_cs3_reg_group$a[,1])  - inv_logit(post_cs3_reg_group$a[,2])
+
+mean_3_a_diff <- mean(diff_p_3 ) 
+mean_3_a_diff
+HDI_3_a_diff <- HPDI(diff_p_3 ) 
+HDI_3_a_diff
+
+plot_dens_a <- plot(cs3_reg_group@stanfit, pars=c('a_mu','a'), show_density=T, fill_color = 'skyblue')
+print(plot_dens_a)
+#####
+
+
+#####
+#random intercepts and group regression
+cs3_reg_full <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a_bar + z[subject]*a_sigma + 
+                    x[group]*g_sigma,
+        z[subject] ~ dnorm( 0 , 1 ),
+        x[group] ~ dnorm( 0 , 1 ),
+        a_bar ~ dnorm( 0 , 1 ),
+        a_sigma ~ dhalfnorm(  0 , .5 ),
+        g_sigma ~ dhalfnorm(  0 , .5 ),
+        #generated quantities 
+        gq> vector[subject]:a <<- a_bar + z*a_sigma,
+        gq> vector[group]:g <<- x*g_sigma
+  ) , data=dat_list3 , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE , control = list(adapt_delta = 0.999) )
+
+#control = list(adapt_delta = 0.999) 
+prior <- extract.prior( cs3_reg_full )
+p <- inv_logit( prior$a_bar )
+dens( p , adj=0.1 )
+
+dens( prior$a_sigma , adj=0.1 )
+
+#quality checks, trace and trank plots
+traceplot( cs3_reg_full )
+trankplot( cs3_reg_full , n_cols=2 )
+
+#parameter estimates
+precis( cs3_reg_full , depth=2)
+
+#extract posterior samples
+post_cs3_reg_full <- extract.samples( cs3_reg_full ) 
+
+#means and HPDIs for intercept and group-specific intercepts
+M43_a_mu <- mean( inv_logit( post_cs3_reg_full$a ) ) #posterior mean on probability scale, behavioral sample
+M43_a_mu
+HDI43_a_mu <- HPDI( inv_logit( post_cs3_reg_full$a ) ) #highest posterior density on probability scale, behavioral sample
+HDI43_a_mu
+
+
+M43_g1 <- mean( inv_logit( post_cs3_reg_full$g[,1]) ) #posterior mean on probability scale, behavioral sample
+M43_g1
+HDI43_g1 <- HPDI( inv_logit( post_cs3_reg_full$g[,1] ) ) #highest posterior density on probability scale, behavioral sample
+HDI43_g1
+
+M43_g2 <- mean( inv_logit( post_cs3_reg_full$g[,2]) ) #posterior mean on probability scale, behavioral sample
+M43_g2
+HDI43_g2 <- HPDI( inv_logit( post_cs3_reg_full$g[,2] ) ) #highest posterior density on probability scale, behavioral sample
+HDI43_g2
+#####
+
+
+
+
+#model comparison
+compare(cs3_reg_flat, cs3_reg_rand, cs3_reg_group, cs3_reg_full, func = PSIS)
+```
+
+
+#Regression model on choice probailities, CS2n - tbt
+```{r}
+ ##CS1
+new_ds_tbt<- ds_tbt[ which(ds_tbt$CS =='4'), ]
+
+# prior trimmed data list
+dat_list4 <- list(
+  choices = new_ds_tbt$choice,
+  subject = new_ds_tbt$subject,
+  group = new_ds_tbt$group
+)
+
+#####
+#flat regression, no random intercepts
+cs4_reg_flat <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a,
+        a ~ dnorm( 0 , 1 )
+  ) , data=dat_list4 , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE )
+
+#quality checks, trace and trank plots
+traceplot( cs4_reg_flat )
+trankplot( cs4_reg_flat , n_cols=2 )
+
+#parameter estimates
+precis( cs4_reg_flat , depth=2)
+
+#extract posterior samples
+post_cs4_flat <- extract.samples( cs4_reg_flat ) 
+
+#means and HPDIs for intercept
+M14_a <- mean( inv_logit( post_cs4_flat$a ) ) #posterior mean on probability scale, behavioral sample
+M14_a
+HDI14_a <- HPDI( inv_logit( post_cs4_flat$a  ) ) #highest posterior density on probability scale, behavioral sample
+HDI14_a
+######
+
+#####
+#random intercepts regression
+cs4_reg_rand <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a[subject],
+        a[subject] ~ dnorm( a_mu, a_sigma ),
+        #hyper-priors
+        c(a_mu) ~ dnorm( 0 , 1 ),
+        c(a_sigma) ~ dhalfnorm(  0 , 1 )
+  ) , data=dat_list4 , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE )
+
+
+# #sensible prior on probability scale?
+# prior <- extract.prior( cs1_reg )
+# p <- inv_logit( prior$a_mu )
+# dens( p , adj=0.1 )
+# 
+# dens( prior$a_sigma , adj=0.1 )
+
+
+#quality checks, trace and trank plots
+traceplot( cs4_reg_rand )
+trankplot( cs4_reg_rand , n_cols=2 )
+
+#parameter estimates
+precis( cs4_reg_rand , depth=2)
+
+#extract posterior samples
+post_cs4 <- extract.samples( cs4_reg_rand ) 
+
+#means and HPDIs for varying intercept 
+M24_a_mu <- mean( inv_logit( post_cs4$a_mu ) ) #posterior mean on probability scale, behavioral sample
+M24_a_mu
+HDI24_a_mu <- HPDI( inv_logit( post_cs4$a_mu ) ) #highest posterior density on probability scale, behavioral sample
+HDI24_a_mu
+
+#find the proportion of the HPDI that is inside the ROPE
+rope(inv_logit( post_cs4$a_mu ), range = c(.45, .55))
+
+plot( precis(cs4_reg_rand,depth=2) ) 
+
+plot_dens_a <- plot(cs4_reg_rand@stanfit, pars=c('a_mu','a'), show_density=T, fill_color = 'skyblue')
+print(plot_dens_a)
+#####
+
+
+#####
+#group model - reparameterized
+cs4_reg_group <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a_mu + x[group]*a_sigma,
+        x[group] ~ dnorm( 0 , 1 ),
+        a_mu ~ dnorm(  0 , 1 ),
+        a_sigma ~ dhalfnorm(  0 , .5 ),
+        #generated quantities
+        gq> vector[group]:a <<- a_mu + x*a_sigma
+  ) , data=dat_list4 , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE, control = list(adapt_delta = 0.999)  )
+#control = list(adapt_delta = 0.999, stepsize = 1.0, max_treedepth = 20) )
+
+
+#quality checks, trace and trank plots
+traceplot( cs4_reg_group )
+trankplot( cs4_reg_group , n_cols=2 )
+
+#parameter estimates
+precis( cs4_reg_group , depth=2)
+
+#extract posterior samples
+post_cs4_reg_group <- extract.samples( cs4_reg_group ) 
+
+#means and HPDIs for intercept and group-specific intercepts
+M34_a <- mean( inv_logit( post_cs4_reg_group$a_mu ) ) #posterior mean on probability scale, behavioral sample
+M34_a
+HDI34_a <- HPDI( inv_logit( post_cs4_reg_group$a_mu  ) ) #highest posterior density on probability scale, behavioral sample
+HDI34_a
+
+M34_a1 <- mean( inv_logit( post_cs4_reg_group$a[,1] ) ) #posterior mean on probability scale, behavioral sample
+M34_a1
+HDI34_a1 <- HPDI( inv_logit( post_cs4_reg_group$a[,1]  ) ) #highest posterior density on probability scale, behavioral sample
+HDI34_a1
+
+M34_a2 <- mean( inv_logit( post_cs4_reg_group$a[,2] ) ) #posterior mean on probability scale, fmri sample
+M34_a2
+HDI34_a2 <- HPDI( inv_logit( post_cs4_reg_group$a[,2]  ) ) #highest posterior density on probability scale, fmri sample
+HDI34_a2
+
+#means and HPDIs for group difference on intercept
+diff_4 <- post_cs4_reg_group$a[,1] -  post_cs4_reg_group$a[,2]
+diff_p_4 <- inv_logit(post_cs4_reg_group$a[,1])  - inv_logit(post_cs4_reg_group$a[,2])
+
+mean_4_a_diff <- mean(diff_p_4 ) 
+mean_4_a_diff
+HDI_4_a_diff <- HPDI(diff_p_4 ) 
+HDI_4_a_diff
+
+plot_dens_a <- plot(cs4_reg_group@stanfit, pars=c('a_mu','a'), show_density=T, fill_color = 'skyblue')
+print(plot_dens_a)
+#####
+
+
+#####
+#random intercepts and group regression
+cs4_reg_full <- ulam(
+  alist(
+        choices ~ dbinom( 1 , p ) ,
+        logit(p) <- a_bar + z[subject]*a_sigma + 
+                    x[group]*g_sigma,
+        z[subject] ~ dnorm( 0 , 1 ),
+        x[group] ~ dnorm( 0 , 1 ),
+        a_bar ~ dnorm( 0 , 1 ),
+        a_sigma ~ dhalfnorm(  0 , .5 ),
+        g_sigma ~ dhalfnorm(  0 , .5 ),
+        #generated quantities 
+        gq> vector[subject]:a <<- a_bar + z*a_sigma,
+        gq> vector[group]:g <<- x*g_sigma
+  ) , data=dat_list4 , chains=4 , iter = 10000, warmup=1000 ,cores = 16, log_lik=TRUE , control = list(adapt_delta = 0.999) )
+
+#control = list(adapt_delta = 0.999) 
+prior <- extract.prior( cs4_reg_full )
+p <- inv_logit( prior$a_bar )
+dens( p , adj=0.1 )
+
+dens( prior$a_sigma , adj=0.1 )
+
+#quality checks, trace and trank plots
+traceplot( cs4_reg_full )
+trankplot( cs4_reg_full , n_cols=2 )
+
+#parameter estimates
+precis( cs4_reg_full , depth=2)
+
+#extract posterior samples
+post_cs4_reg_full <- extract.samples( cs4_reg_full ) 
+
+#means and HPDIs for intercept and group-specific intercepts
+M44_a_mu <- mean( inv_logit( post_cs4_reg_full$a_bar ) ) #posterior mean on probability scale, behavioral sample
+M44_a_mu
+HDI44_a_mu <- HPDI( inv_logit( post_cs4_reg_full$a_bar ) ) #highest posterior density on probability scale, behavioral sample
+HDI44_a_mu
+
+
+M44_g1 <- mean( inv_logit( post_cs4_reg_full$g[,1]) ) #posterior mean on probability scale, behavioral sample
+M44_g1
+HDI44_g1 <- HPDI( inv_logit( post_cs4_reg_full$g[,1] ) ) #highest posterior density on probability scale, behavioral sample
+HDI44_g1
+
+M44_g2 <- mean( inv_logit( post_cs4_reg_full$g[,2]) ) #posterior mean on probability scale, behavioral sample
+M44_g2
+HDI44_g2 <- HPDI( inv_logit( post_cs4_reg_full$g[,2] ) ) #highest posterior density on probability scale, behavioral sample
+HDI44_g2
+#####
+
+
+
+
+#model comparison
+compare(cs4_reg_flat, cs4_reg_rand, cs4_reg_group, cs4_reg_full, func = PSIS)
+```
+
+
+
+#Regression model on choice probailities, CS1 - aggregated
+```{r}
+
+##CS1
+new_ds<- ds[ which(ds$CS =='1'), ]
+
+
+# prior trimmed data list
+dat_list1 <- list(
+  total_choices = new_ds$total_choices,
+  n_choices = new_ds$choices,
+  group = new_ds$group)
+
+#cs1 reg  model
+cs1_reg <- ulam(
+  alist(
+        n_choices ~ dbinom( total_choices , p ) ,
+        logit(p) <- a[group],
+        #a[group] ~ dnorm( a_mu, a_sigma ),
+        a[group] ~ dnorm( a_mu, 1 ),
+        #hyper-priors
+        a_mu ~ dnorm( 0 , 1 )#,
+        #a_sigma ~ dhalfcauchy(  0 , scale = .01 )
+        #a_sigma ~ dexp( 1 )
+  ) , data=dat_list1 , chains=4 , iter = 10000, warmup=1000 ,cores = 4, log_lik=TRUE )
+
+#sensible prior on probability scale?
+prior <- extract.prior( cs1_reg , n=1e4 )
+p <- inv_logit( prior$a_mu )
+dens( p , adj=0.1 )
+
+#parameter estimates
+precis( cs1_reg , depth=2)
+
+#extract posterior samples
+post_cs1 <- extract.samples( cs1_reg ) 
+
+#means and HPDIs for intercept and group-specific intercepts
+M1_a_mu <- mean( inv_logit( post_cs1$a_mu ) ) #posterior mean on probability scale, behavioral sample
+M1_a_mu
+HDI1_a_mu <- HPDI( inv_logit( post_cs1$a_mu  ) ) #highest posterior density on probability scale, behavioral sample
+HDI1_a_mu
+
+M1_a1 <- mean( inv_logit( post_cs1$a[,1] ) ) #posterior mean on probability scale, behavioral sample
+M1_a1
+HDI1_a1 <- HPDI( inv_logit( post_cs1$a[,1]  ) ) #highest posterior density on probability scale, behavioral sample
+HDI1_a1
+
+M1_a2 <- mean( inv_logit( post_cs1$a[,2] ) ) #posterior mean on probability scale, fmri sample
+M1_a2
+HDI1_a2 <- HPDI( inv_logit( post_cs1$a[,2]  ) ) #highest posterior density on probability scale, fmri sample
+HDI1_a2
+
+#means and HPDIs for group difference on intercept
+diff_1 <- post_cs1$a[,1] -  post_cs1$a[,2]
+diff_p_1 <- inv_logit(post_cs1$a[,1])  - inv_logit(post_cs1$a[,2])
+
+mean_1_a_diff <- mean(diff_p_1 ) 
+mean_1_a_diff
+HDI_1_a_diff <- HPDI(diff_p_1 ) 
+HDI_1_a_diff
+
+#quality checks, trace and trank plots
+traceplot( cs1_reg )
+trankplot( cs1_reg , n_cols=2 )
+
+#correlation of parameters
+pairs(cs1_reg)
+
+
+##simple regression, w/o group-specific intercept
+cs1_reg_simp <- ulam(
+  alist(
+        n_choices ~ dbinom( total_choices , p ) ,
+        logit(p) <- a,
+        a ~ dnorm( 0 , 1 )
+  ) , data=dat_list1 , chains=4 , iter = 10000, warmup=1000 ,cores = 4, log_lik=TRUE )
+
+#parameter estimates
+precis( cs1_reg_simp , depth=2) 
+
+#means and HPDIs for intercept and group-specific intercepts
+post_cs1_simp <- extract.samples( cs1_reg_simp ) 
+M_1simp <- mean( inv_logit( post_cs1_simp$a ) ) #posterior mean on probability scale, behavioral sample
+M_1simp
+HDI_1simp <- HPDI( inv_logit( post_cs1_simp$a  ) ) #highest posterior density on probability scale, behavioral sample
+HDI_1simp
+
+#model comparison
+compare(cs1_reg_simp, cs1_reg, func = PSIS)
+
+
+
+
+
+cs1_reg_betabinom <- ulam(
+  alist(
+        n_choices ~ dbetabinom( total_choices , p , theta ) ,
+        logit(p) <- a,
+        a ~ dnorm( 0 , 2 ),
+        transpars> theta <<- phi + 2.0,
+        phi ~ dexp(1)
+  ) , data=dat_list1 , chains=4 , iter = 10000, warmup=1000 ,cores = 4, log_lik=TRUE, control = list(adapt_delta = 0.99))
+
+
+
+
+#correlation of parameters
+pairs(cs1_reg_betabinom)
+postcheck( cs1_reg_betabinom )
+
+
+
+
+```
+
+###CS2
+```{r}
+
+new_ds<- ds[ which(ds$CS =='2'), ]
+
+# prior trimmed data list
+dat_list2 <- list(
+  total_choices = new_ds$total_choices,
+  n_choices = new_ds$choices,
+  group = new_ds$group)
+
+#cs2 reg  model
+cs2_reg <- ulam(
+  alist(
+        n_choices ~ dbinom( total_choices , p ) ,
+        logit(p) <- a[group],
+        #a[group] ~ dnorm( a_mu, a_sigma ), #a_sigma seems to cause convergence problems... why?
+        a[group] ~ dnorm( a_mu, 1 ),
+        #hyper-priors
+        a_mu ~ dnorm( 0, 1)
+        #a_sigma ~ dexp( .5 )
+        #a_sigma ~ dhalfnorm(0, .4)
+  ) , data=dat_list2 , chains=4 , iter = 10000, warmup=1000 ,cores = 4, log_lik=TRUE)
+
+#sensible prior on probability scale?
+prior <- extract.prior( cs2_reg , n=1e4 )
+p <- inv_logit( prior$a_mu )
+dens( p , adj=0.1 )
+
+# p <- inv_logit( prior$a_sigma )
+# dens( p , adj=0.1 )
+
+#parameter estimates
+precis( cs2_reg , depth=2) 
+
+#extract posterior samples
+post_cs2 <- extract.samples( cs2_reg ) 
+
+#means and HPDIs for intercept and group-specific intercepts
+M2_a_mu <- mean( inv_logit( post_cs2$a_mu ) ) #posterior mean on probability scale, behavioral sample
+M2_a_mu
+HDI2_a_mu <- HPDI( inv_logit( post_cs2$a_mu  ) ) #highest posterior density on probability scale, behavioral sample
+HDI2_a_mu
+
+M2_a1 <- mean( inv_logit( post_cs2$a[,1] ) ) #posterior mean on probability scale, behavioral sample
+M2_a1
+HDI2_a1 <- HPDI( inv_logit( post_cs2$a[,1]  ) ) #highest posterior density on probability scale, behavioral sample
+HDI2_a1
+
+M2_a2 <- mean( inv_logit( post_cs2$a[,2] ) ) #posterior mean on probability scale, fmri sample
+M2_a2
+HDI2_a2 <- HPDI( inv_logit( post_cs2$a[,2]  ) ) #highest posterior density on probability scale, fmri sample
+HDI2_a2
+
+#means and HPDIs for group difference on intercept
+diff_2 <- post_cs2$a[,1] -  post_cs2$a[,2]
+diff_p_2 <- inv_logit(post_cs2$a[,1])  - inv_logit(post_cs2$a[,2])
+
+mean_2_a_diff <- mean(diff_p_2 ) 
+mean_2_a_diff
+HDI_2_a_diff <- HPDI(diff_p_2 ) 
+HDI_2_a_diff
+
+
+#quality checks, trace and trank plots
+traceplot( cs2_reg )
+trankplot( cs2_reg , n_cols=2 )
+
+#correlation of parameters
+pairs(cs2_reg)
+
+
+##simple regression, w/o group-specific intercept
+cs2_reg_simp <- ulam(
+  alist(
+        n_choices ~ dbinom( total_choices , p ) ,
+        logit(p) <- a,
+        a ~ dnorm( 0 , 1 )
+  ) , data=dat_list2 , chains=4 , iter = 10000, warmup=1000 ,cores = 4, log_lik=TRUE )
+
+#parameter estimates
+precis( cs2_reg_simp , depth=2) 
+
+#means and HPDIs for intercept and group-specific intercepts
+post_cs2_simp <- extract.samples( cs2_reg_simp ) 
+M_2simp <- mean( inv_logit( post_cs2_simp$a ) ) #posterior mean on probability scale, behavioral sample
+M_2simp
+HDI_2simp <- HPDI( inv_logit( post_cs2_simp$a  ) ) #highest posterior density on probability scale, behavioral sample
+HDI_2simp
+
+#model comparison
+compare(cs2_reg_simp, cs2_reg, func = PSIS)
+
+
+```
+
+###CS1n
+```{r}
+
+new_ds<- ds[ which(ds$CS =='3'), ]
+
+# prior trimmed data list
+dat_list3 <- list(
+  total_choices = new_ds$total_choices,
+  n_choices = new_ds$choices,
+  group = new_ds$group)
+
+#cs3 reg  model
+cs3_reg <- ulam(
+  alist(
+        n_choices ~ dbinom( total_choices , p ) ,
+        logit(p) <- a[group],
+        #a[group] ~ dnorm( a_mu, a_sigma ),
+        a[group] ~ dnorm( a_mu, 1 ),
+        #hyper-priors
+        a_mu ~ dnorm( 0 , 1 )#,
+        #a_sigma ~ dexp( 1 )
+  ) , data=dat_list3 , chains=4 , iter = 10000, warmup=1000 ,cores = 4, log_lik=TRUE)
+
+
+#parameter estimates
+precis( cs3_reg , depth=2) 
+
+#extract posterior samples
+post_cs3 <- extract.samples( cs3_reg ) 
+
+#means and HPDIs for intercept and group-specific intercepts
+M3_a_mu <- mean( inv_logit( post_cs3$a_mu ) ) #posterior mean on probability scale, behavioral sample
+M3_a_mu
+HDI3_a_mu <- HPDI( inv_logit( post_cs3$a_mu  ) ) #highest posterior density on probability scale, behavioral sample
+HDI3_a_mu
+
+M3_a1 <- mean( inv_logit( post_cs3$a[,1] ) ) #posterior mean on probability scale, behavioral sample
+M3_a1
+HDI3_a1 <- HPDI( inv_logit( post_cs3$a[,1]  ) ) #highest posterior density on probability scale, behavioral sample
+HDI3_a1
+
+M3_a2 <- mean( inv_logit( post_cs3$a[,2] ) ) #posterior mean on probability scale, fmri sample
+M3_a2
+HDI3_a2 <- HPDI( inv_logit( post_cs3$a[,2]  ) ) #highest posterior density on probability scale, fmri sample
+HDI3_a2
+
+#means and HPDIs for group difference on intercept
+diff_3 <- post_cs3$a[,1] -  post_cs3$a[,2]
+diff_p_3 <- inv_logit(post_cs3$a[,1])  - inv_logit(post_cs3$a[,2])
+
+mean_3_a_diff <- mean(diff_p_3 ) 
+mean_3_a_diff
+HDI_3_a_diff <- HPDI(diff_p_3 ) 
+HDI_3_a_diff
+
+
+#quality checks, trace and trank plots
+traceplot( cs3_reg )
+trankplot( cs3_reg , n_cols=2 )
+
+#correlation of parameters
+pairs(cs3_reg)
+
+##simple regression, w/o group-specific intercept
+cs3_reg_simp <- ulam(
+  alist(
+        n_choices ~ dbinom( total_choices , p ) ,
+        logit(p) <- a,
+        a ~ dnorm( 0 , 1 )
+  ) , data=dat_list3 , chains=4 , iter = 10000, warmup=1000 ,cores = 4, log_lik=TRUE )
+
+#parameter estimates
+precis( cs3_reg_simp , depth=2) 
+
+#means and HPDIs for intercept and group-specific intercepts
+post_cs3_simp <- extract.samples( cs3_reg_simp ) 
+M_3simp <- mean( inv_logit( post_cs3_simp$a ) ) #posterior mean on probability scale, behavioral sample
+M_3simp
+HDI_3simp <- HPDI( inv_logit( post_cs3_simp$a  ) ) #highest posterior density on probability scale, behavioral sample
+HDI_3simp
+
+#model comparison
+compare(cs3_reg_simp, cs3_reg, func = PSIS)
+
+
+```
+
+###CS2n
+```{r}
+
+new_ds<- ds[ which(ds$CS =='4'), ]
+
+# prior trimmed data list
+dat_list4 <- list(
+  total_choices = new_ds$total_choices,
+  n_choices = new_ds$choices,
+  group = new_ds$group)
+
+#cs4 reg  model
+cs4_reg <- ulam(
+  alist(
+        n_choices ~ dbinom( total_choices , p ) ,
+        logit(p) <- a[group],
+        #a[group] ~ dnorm( a_mu, a_sigma ),
+        a[group] ~ dnorm( a_mu, 1 ),
+        #hyper-priors
+        a_mu ~ dnorm( 0 , 1 )#,
+        #a_sigma ~ dexp( 1 )
+  ) , data=dat_list4 , chains=4 , iter = 10000, warmup=1000 ,cores = 4, log_lik=TRUE)
+
+
+#parameter estimates
+precis( cs4_reg , depth=2) 
+
+#extract posterior samples
+post_cs4 <- extract.samples( cs4_reg ) 
+
+#means and HPDIs for intercept and group-specific intercepts
+M4_a_mu <- mean( inv_logit( post_cs4$a_mu ) ) #posterior mean on probability scale, behavioral sample
+M4_a_mu
+HDI4_a_mu <- HPDI( inv_logit( post_cs4$a_mu  ) ) #highest posterior density on probability scale, behavioral sample
+HDI4_a_mu
+
+M4_a1 <- mean( inv_logit( post_cs4$a[,1] ) ) #posterior mean on probability scale, behavioral sample
+M4_a1
+HDI4_a1 <- HPDI( inv_logit( post_cs4$a[,1]  ) ) #highest posterior density on probability scale, behavioral sample
+HDI4_a1
+
+M4_a2 <- mean( inv_logit( post_cs4$a[,2] ) ) #posterior mean on probability scale, fmri sample
+M4_a2
+HDI4_a2 <- HPDI( inv_logit( post_cs4$a[,2]  ) ) #highest posterior density on probability scale, fmri sample
+HDI4_a2
+
+#means and HPDIs for group difference on intercept
+diff_4 <- post_cs4$a[,1] -  post_cs4$a[,2]
+diff_p_4 <- inv_logit(post_cs4$a[,1])  - inv_logit(post_cs4$a[,2])
+
+mean_4_a_diff <- mean(diff_p_4 ) 
+mean_4_a_diff
+HDI_4_a_diff <- HPDI(diff_p_4 ) 
+HDI_4_a_diff
+
+
+#quality checks, trace and trank plots
+traceplot( cs4_reg )
+trankplot( cs4_reg , n_cols=2 )
+
+#correlation of parameters
+pairs(cs4_reg)
+
+##simple regression, w/o group-specific intercept
+cs4_reg_simp <- ulam(
+  alist(
+        n_choices ~ dbinom( total_choices , p ) ,
+        logit(p) <- a,
+        a ~ dnorm( 0 , 1 )
+  ) , data=dat_list4 , chains=4 , iter = 10000, warmup=1000 ,cores = 4, log_lik=TRUE )
+
+#parameter estimates
+precis( cs4_reg_simp , depth=2) 
+
+#means and HPDIs for intercept and group-specific intercepts
+post_cs4_simp <- extract.samples( cs4_reg_simp ) 
+M_4simp <- mean( inv_logit( post_cs4_simp$a ) ) #posterior mean on probability scale, behavioral sample
+M_4simp
+HDI_4simp <- HPDI( inv_logit( post_cs4_simp$a  ) ) #highest posterior density on probability scale, behavioral sample
+HDI_4simp
+
+#model comparison
+compare(cs4_reg_simp, cs4_reg, func = PSIS)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

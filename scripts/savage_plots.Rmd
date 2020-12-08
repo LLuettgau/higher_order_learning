@@ -1,0 +1,1054 @@
+---
+title: "Plots"
+output: html_notebook
+---
+```{r, SETTINGS-knitr, include=FALSE}
+stopifnot(require(knitr))
+options(width = 90)
+opts_chunk$set(
+  cache = TRUE,
+  comment = NA,
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+Load required packages:
+```{r}
+library(rethinking)
+library(bayestestR)
+library(brms)
+options(mc.cores = parallel::detectCores())
+library(tidyverse)
+theme_set(theme_default())
+library(readr)
+library(tidyr)
+library(Hmisc)
+library(plyr)
+library(RColorBrewer)
+library(reshape2)
+
+```
+
+
+Load the data:
+```{r}
+
+setwd("/Users/lennart/Desktop/savage/MLM/") #change working dir
+
+ds = read.csv("savage_long.csv")  # read from first sheet
+n_sub <- 49
+  
+ds$group <- ifelse( ds$SubID < 900 , 1L , 2L )
+
+ds[,'SubID']<-factor(ds[,'SubID'])
+head(ds, 10)
+
+conditions <- make_conditions(ds, "SubID")
+
+#wide format
+
+ds_wide = read.csv("savage_wide.csv")
+
+#rsa data
+ds_rsa = read.csv("rsa.csv")
+ds_rsa_norm = read.csv("rsa_norm.csv")
+
+#decoding data
+ds_decoding = read.csv("decoding.csv")
+
+ds_decoding1 = read.csv("decoding1.csv")
+ds_decoding2 = read.csv("decoding2.csv")
+
+#behavioral sample
+ds_behav = ds[ which(ds$ofc_acc =='NaN'),]
+ds_behav_wide = ds_wide[ 1:20,]
+  
+#fmri sample
+ds_fmri = ds[ 81:196,]
+ds_fmri_wide = ds_wide[ 21:49,]
+
+
+#tbt data
+ds_tbt = read.csv("savage_long_tbt.csv")  # read from first sheet
+ds_tbt$group <- ifelse( ds_tbt$SubID < 900 , 1L , 2L )
+head(ds_tbt, 10)
+
+
+```
+
+
+##raincloud plots pooled samples
+```{r}
+
+w = 14
+h = 7
+
+
+packages <- c("ggplot2", "dplyr", "lavaan", "plyr", "cowplot", "rmarkdown", 
+              "readr", "caTools", "bitops")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())))  
+}
+
+
+library(cowplot)
+library(dplyr)
+library(readr)
+source("/Users/lennart/Desktop/savage/plots/rainclouds/R_rainclouds.R")
+
+
+# Defining the geom_flat_violin function ----
+
+"%||%" <- function(a, b) {
+  if (!is.null(a)) a else b
+}
+
+geom_flat_violin <- function(mapping = NULL, data = NULL, stat = "ydensity",
+                             position = "dodge", trim = TRUE, scale = "area",
+                             show.legend = NA, inherit.aes = TRUE, ...) {
+  layer(
+    data = data,
+    mapping = mapping,
+    stat = stat,
+    geom = GeomFlatViolin,
+    position = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params = list(
+      trim = trim,
+      scale = scale,
+      ...
+    )
+  )
+}
+
+
+
+library(scales)
+
+library(reshape2)
+my_datal <- melt(ds_wide, id.vars = c("SubID"), measure.vars = c("CS1plus", "CS2plus", "CS1n", "CS2n"), variable.name = "CS", value.name = "ChoiceProbability")
+
+raincloud_theme = theme(
+text = element_text(size = 30),
+#axis.title.x = element_text(size = 16),
+#axis.title.y = element_text(size = 30),
+axis.title.x = element_blank(),
+axis.title.y = element_blank(),
+#axis.text = element_text(size = 30),
+axis.text.x = element_text(color="black", 
+                           size=26, angle=45, vjust = 0.5),
+axis.text.y = element_text(color="black", 
+                           size=26, angle=0),
+axis.ticks.length.y = unit(5, "pt"),
+axis.ticks.length.x = unit(0, "pt"),
+panel.border = element_blank(),
+panel.grid.minor = element_blank(),
+panel.grid.major = element_blank(),
+axis.line.x = element_line(colour = 'black', size=1, linetype='solid'),
+axis.line.y = element_line(colour = 'black', size=1, linetype='solid'))
+
+lb <- function(x) mean(x) - sd(x)
+ub <- function(x) mean(x) + sd(x)
+
+sumld<- ddply(my_datal, ~CS, summarise, mean = mean(ChoiceProbability), median = median(ChoiceProbability), lower = lb(ChoiceProbability), upper = ub(ChoiceProbability))
+
+scaleFUN <- function(x) sprintf("%.2f", x)
+
+
+
+g <- ggplot(data = my_datal, aes(y = ChoiceProbability, x = CS, fill = CS)) +
+geom_flat_violin(position = position_nudge(x = -.12, y = 0), alpha = .8, adjust =1.5) +
+geom_boxplot(aes(x = as.numeric(CS)-0.12, y = ChoiceProbability), width = .1, guides = FALSE, outlier.shape = NA, alpha = .1, colour = "BLACK", size = 1.15) +
+#geom_point(aes(y = ChoiceProbability, color = CS, x = as.numeric(CS)-0.8,),position = position_jitterdodge(jitter.width = .65, dodge.width = .5),  size = 3, alpha = 0.5, colour = "BLACK") +
+  
+geom_point(aes(y = ChoiceProbability, color = CS, x = as.numeric(CS)-0.35),position = position_jitter(width = .12), size = 3.5, alpha = 0.5, colour = "BLACK") +
+geom_hline(yintercept=0.50, linetype="dashed", 
+                color = "black", size=1) +
+#geom_hline(yintercept=0.45, linetype="dashed", 
+#                color = "black", size=.5) +
+#geom_hline(yintercept=0.55, linetype="dashed", 
+#                color = "black", size=.5) +
+#geom_point(data = sumld, aes(x = CS, y = mean), position = position_nudge(x = .4), size = 3.5) +
+#geom_errorbar(data = sumld, aes(ymin = lower, ymax = upper, y = mean), position = position_nudge(x = .4), width = 0) +
+#xlab('CS')+
+ylab('Choice Probability')+
+expand_limits(x = 4.5) +
+guides(fill = FALSE) +
+guides(color = FALSE) +
+#scale_color_brewer(palette = "Dark2") +
+#scale_fill_brewer(palette = "Dark2") +
+#coord_flip() +
+theme_bw() +
+raincloud_theme +
+scale_y_continuous(labels = scaleFUN) #+ 
+#add HPDI
+#geom_segment(aes(x = .75, y = HDI1[1], xend = 1.75, yend = HDI1[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = .75, y = HDI1[2], xend = 1.75, yend = HDI1[2]), color = "darkred", size=1) +
+#geom_segment(aes(x = 1.75, y = HDI2[1], xend = 2.75, yend = HDI2[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = 1.75, y = HDI2[2], xend = 2.75, yend = HDI2[2]), color = "darkred", size=1) +
+#geom_segment(aes(x = 2.75, y = HDI3[1], xend = 3.75, yend = HDI3[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = 2.75, y = HDI3[2], xend = 3.75, yend = HDI3[2]), color = "darkred", size=1) +
+#geom_segment(aes(x = 3.75, y = HDI4[1], xend = 4.75, yend = HDI4[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = 3.75, y = HDI4[2], xend = 4.75, yend = HDI4[2]), color = "darkred", size=1) 
+
+# Rename / Change tick mark labels
+g <- g + scale_x_discrete(breaks=c("CS1plus","CS2plus","CS1n","CS2n"),
+        labels=c((expression(paste("CS"[1]^+{}, " vs ", "CS"[1]^-{}))), 
+                 (expression(paste("CS"[2]^+{}, " vs ", "CS"[2]^-{}))),
+                 (expression(paste("CS"[1]^n))), 
+                 (expression(paste("CS"[2]^n)))))
+
+g + scale_fill_manual(values=c("#00008B", "#6495ED", "#696969", "#D3D3D3"))
+
+#ggsave('/Users/lennart/Desktop/savage/plots/rainclouds/raincloudplots_savage_reduced.png', width = w, height = h, dpi = 150)
+
+```
+
+
+
+
+
+
+##raincloud plots fmri sample
+```{r}
+
+w = 14
+h = 7
+
+
+packages <- c("ggplot2", "dplyr", "lavaan", "plyr", "cowplot", "rmarkdown", 
+              "readr", "caTools", "bitops")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())))  
+}
+
+
+library(cowplot)
+library(dplyr)
+library(readr)
+source("/Users/lennart/Desktop/savage/plots/rainclouds/R_rainclouds.R")
+
+
+# Defining the geom_flat_violin function ----
+
+"%||%" <- function(a, b) {
+  if (!is.null(a)) a else b
+}
+
+geom_flat_violin <- function(mapping = NULL, data = NULL, stat = "ydensity",
+                             position = "dodge", trim = TRUE, scale = "area",
+                             show.legend = NA, inherit.aes = TRUE, ...) {
+  layer(
+    data = data,
+    mapping = mapping,
+    stat = stat,
+    geom = GeomFlatViolin,
+    position = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params = list(
+      trim = trim,
+      scale = scale,
+      ...
+    )
+  )
+}
+
+
+
+library(scales)
+
+library(reshape2)
+my_datal <- melt(ds_fmri_wide, id.vars = c("SubID"), measure.vars = c("CS1plus", "CS2plus", "CS1n", "CS2n"), variable.name = "CS", value.name = "ChoiceProbability")
+
+raincloud_theme = theme(
+text = element_text(size = 30),
+#axis.title.x = element_text(size = 16),
+#axis.title.y = element_text(size = 30),
+axis.title.x = element_blank(),
+axis.title.y = element_blank(),
+#axis.text = element_text(size = 30),
+axis.text.x = element_text(color="black", 
+                           size=26, angle=45, vjust = 0.5),
+axis.text.y = element_text(color="black", 
+                           size=26, angle=0),
+axis.ticks.length.y = unit(5, "pt"),
+axis.ticks.length.x = unit(0, "pt"),
+panel.border = element_blank(),
+panel.grid.minor = element_blank(),
+panel.grid.major = element_blank(),
+axis.line.x = element_line(colour = 'black', size=1, linetype='solid'),
+axis.line.y = element_line(colour = 'black', size=1, linetype='solid'))
+
+lb <- function(x) mean(x) - sd(x)
+ub <- function(x) mean(x) + sd(x)
+
+sumld<- ddply(my_datal, ~CS, summarise, mean = mean(ChoiceProbability), median = median(ChoiceProbability), lower = lb(ChoiceProbability), upper = ub(ChoiceProbability))
+
+scaleFUN <- function(x) sprintf("%.2f", x)
+
+
+
+g <- ggplot(data = my_datal, aes(y = ChoiceProbability, x = CS, fill = CS)) +
+geom_flat_violin(position = position_nudge(x = -.12, y = 0), alpha = .8, adjust =1.5) +
+geom_boxplot(aes(x = as.numeric(CS)-0.12, y = ChoiceProbability), width = .1, guides = FALSE, outlier.shape = NA, alpha = .1, colour = "BLACK", size = 1.15) +
+#geom_point(aes(y = ChoiceProbability, color = CS, x = as.numeric(CS)-0.8,),position = position_jitterdodge(jitter.width = .65, dodge.width = .5),  size = 3, alpha = 0.5, colour = "BLACK") +
+  
+geom_point(aes(y = ChoiceProbability, color = CS, x = as.numeric(CS)-0.35),position = position_jitter(width = .12), size = 3.5, alpha = 0.5, colour = "BLACK") +
+geom_hline(yintercept=0.50, linetype="dashed", 
+                color = "black", size=1) +
+#geom_hline(yintercept=0.45, linetype="dashed", 
+#                color = "black", size=.5) +
+#geom_hline(yintercept=0.55, linetype="dashed", 
+#                color = "black", size=.5) +
+#geom_point(data = sumld, aes(x = CS, y = mean), position = position_nudge(x = .4), size = 3.5) +
+#geom_errorbar(data = sumld, aes(ymin = lower, ymax = upper, y = mean), position = position_nudge(x = .4), width = 0) +
+#xlab('CS')+
+ylab('Choice Probability')+
+expand_limits(x = 4.5) +
+guides(fill = FALSE) +
+guides(color = FALSE) +
+#scale_color_brewer(palette = "Dark2") +
+#scale_fill_brewer(palette = "Dark2") +
+#coord_flip() +
+theme_bw() +
+raincloud_theme +
+scale_y_continuous(labels = scaleFUN) #+ 
+#add HPDI
+#geom_segment(aes(x = .75, y = HDI1[1], xend = 1.75, yend = HDI1[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = .75, y = HDI1[2], xend = 1.75, yend = HDI1[2]), color = "darkred", size=1) +
+#geom_segment(aes(x = 1.75, y = HDI2[1], xend = 2.75, yend = HDI2[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = 1.75, y = HDI2[2], xend = 2.75, yend = HDI2[2]), color = "darkred", size=1) +
+#geom_segment(aes(x = 2.75, y = HDI3[1], xend = 3.75, yend = HDI3[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = 2.75, y = HDI3[2], xend = 3.75, yend = HDI3[2]), color = "darkred", size=1) +
+#geom_segment(aes(x = 3.75, y = HDI4[1], xend = 4.75, yend = HDI4[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = 3.75, y = HDI4[2], xend = 4.75, yend = HDI4[2]), color = "darkred", size=1) 
+
+# Rename / Change tick mark labels
+g <- g + scale_x_discrete(breaks=c("CS1plus","CS2plus","CS1n","CS2n"),
+        labels=c((expression(paste("CS"[1]^+{}, " vs ", "CS"[1]^-{}))), 
+                 (expression(paste("CS"[2]^+{}, " vs ", "CS"[2]^-{}))),
+                 (expression(paste("CS"[1]^n))), 
+                 (expression(paste("CS"[2]^n)))))
+
+g + scale_fill_manual(values=c("#00008B", "#6495ED", "#696969", "#D3D3D3"))
+
+#ggsave('/Users/lennart/Desktop/savage/plots/rainclouds/raincloudplots_savage_fmri_sample.png', width = w, height = h, dpi = 1200)
+
+```
+##raincloud plots behav sample
+```{r}
+
+w = 14
+h = 7
+
+
+packages <- c("ggplot2", "dplyr", "lavaan", "plyr", "cowplot", "rmarkdown", 
+              "readr", "caTools", "bitops")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())))  
+}
+
+
+library(cowplot)
+library(dplyr)
+library(readr)
+source("/Users/lennart/Desktop/savage/plots/rainclouds/R_rainclouds.R")
+
+
+# Defining the geom_flat_violin function ----
+
+"%||%" <- function(a, b) {
+  if (!is.null(a)) a else b
+}
+
+geom_flat_violin <- function(mapping = NULL, data = NULL, stat = "ydensity",
+                             position = "dodge", trim = TRUE, scale = "area",
+                             show.legend = NA, inherit.aes = TRUE, ...) {
+  layer(
+    data = data,
+    mapping = mapping,
+    stat = stat,
+    geom = GeomFlatViolin,
+    position = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params = list(
+      trim = trim,
+      scale = scale,
+      ...
+    )
+  )
+}
+
+
+
+library(scales)
+
+library(reshape2)
+my_datal <- melt(ds_behav_wide, id.vars = c("SubID"), measure.vars = c("CS1plus", "CS2plus", "CS1n", "CS2n"), variable.name = "CS", value.name = "ChoiceProbability")
+
+raincloud_theme = theme(
+text = element_text(size = 30),
+#axis.title.x = element_text(size = 16),
+#axis.title.y = element_text(size = 30),
+axis.title.x = element_blank(),
+axis.title.y = element_blank(),
+#axis.text = element_text(size = 30),
+axis.text.x = element_text(color="black", 
+                           size=26, angle=45, vjust = 0.5),
+axis.text.y = element_text(color="black", 
+                           size=26, angle=0),
+axis.ticks.length.y = unit(5, "pt"),
+axis.ticks.length.x = unit(0, "pt"),
+panel.border = element_blank(),
+panel.grid.minor = element_blank(),
+panel.grid.major = element_blank(),
+axis.line.x = element_line(colour = 'black', size=1, linetype='solid'),
+axis.line.y = element_line(colour = 'black', size=1, linetype='solid'))
+
+lb <- function(x) mean(x) - sd(x)
+ub <- function(x) mean(x) + sd(x)
+
+sumld<- ddply(my_datal, ~CS, summarise, mean = mean(ChoiceProbability), median = median(ChoiceProbability), lower = lb(ChoiceProbability), upper = ub(ChoiceProbability))
+
+scaleFUN <- function(x) sprintf("%.2f", x)
+
+
+
+g <- ggplot(data = my_datal, aes(y = ChoiceProbability, x = CS, fill = CS)) +
+geom_flat_violin(position = position_nudge(x = -.12, y = 0), alpha = .8, adjust =1.5) +
+geom_boxplot(aes(x = as.numeric(CS)-0.12, y = ChoiceProbability), width = .1, guides = FALSE, outlier.shape = NA, alpha = .1, colour = "BLACK", size = 1.15) +
+#geom_point(aes(y = ChoiceProbability, color = CS, x = as.numeric(CS)-0.8,),position = position_jitterdodge(jitter.width = .65, dodge.width = .5),  size = 3, alpha = 0.5, colour = "BLACK") +
+  
+geom_point(aes(y = ChoiceProbability, color = CS, x = as.numeric(CS)-0.35),position = position_jitter(width = .12), size = 3.5, alpha = 0.5, colour = "BLACK") +
+geom_hline(yintercept=0.50, linetype="dashed", 
+                color = "black", size=1) +
+#geom_hline(yintercept=0.45, linetype="dashed", 
+#                color = "black", size=.5) +
+#geom_hline(yintercept=0.55, linetype="dashed", 
+#                color = "black", size=.5) +
+#geom_point(data = sumld, aes(x = CS, y = mean), position = position_nudge(x = .4), size = 3.5) +
+#geom_errorbar(data = sumld, aes(ymin = lower, ymax = upper, y = mean), position = position_nudge(x = .4), width = 0) +
+#xlab('CS')+
+ylab('Choice Probability')+
+expand_limits(x = 4.5) +
+guides(fill = FALSE) +
+guides(color = FALSE) +
+#scale_color_brewer(palette = "Dark2") +
+#scale_fill_brewer(palette = "Dark2") +
+#coord_flip() +
+theme_bw() +
+raincloud_theme +
+scale_y_continuous(labels = scaleFUN) #+ 
+#add HPDI
+#geom_segment(aes(x = .75, y = HDI1[1], xend = 1.75, yend = HDI1[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = .75, y = HDI1[2], xend = 1.75, yend = HDI1[2]), color = "darkred", size=1) +
+#geom_segment(aes(x = 1.75, y = HDI2[1], xend = 2.75, yend = HDI2[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = 1.75, y = HDI2[2], xend = 2.75, yend = HDI2[2]), color = "darkred", size=1) +
+#geom_segment(aes(x = 2.75, y = HDI3[1], xend = 3.75, yend = HDI3[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = 2.75, y = HDI3[2], xend = 3.75, yend = HDI3[2]), color = "darkred", size=1) +
+#geom_segment(aes(x = 3.75, y = HDI4[1], xend = 4.75, yend = HDI4[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = 3.75, y = HDI4[2], xend = 4.75, yend = HDI4[2]), color = "darkred", size=1) 
+
+# Rename / Change tick mark labels
+g <- g + scale_x_discrete(breaks=c("CS1plus","CS2plus","CS1n","CS2n"),
+        labels=c((expression(paste("CS"[1]^+{}, " vs ", "CS"[1]^-{}))), 
+                 (expression(paste("CS"[2]^+{}, " vs ", "CS"[2]^-{}))),
+                 (expression(paste("CS"[1]^n))), 
+                 (expression(paste("CS"[2]^n)))))
+
+g + scale_fill_manual(values=c("#00008B", "#6495ED", "#696969", "#D3D3D3"))
+
+#ggsave('/Users/lennart/Desktop/savage/plots/rainclouds/raincloudplots_savage_behav_sample.png', width = w, height = h, dpi = 1200)
+
+```
+
+
+
+##raincloud plots rsa results SOC
+```{r}
+
+w = 15
+h = 7
+
+
+packages <- c("ggplot2", "dplyr", "lavaan", "plyr", "cowplot", "rmarkdown", 
+              "readr", "caTools", "bitops")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())))  
+}
+
+
+library(cowplot)
+library(dplyr)
+library(readr)
+source("/Users/lennart/Desktop/savage/plots/rainclouds/R_rainclouds.R")
+
+
+# Defining the geom_flat_violin function ----
+
+"%||%" <- function(a, b) {
+  if (!is.null(a)) a else b
+}
+
+geom_flat_violin <- function(mapping = NULL, data = NULL, stat = "ydensity",
+                             position = "dodge", trim = TRUE, scale = "area",
+                             show.legend = NA, inherit.aes = TRUE, ...) {
+  layer(
+    data = data,
+    mapping = mapping,
+    stat = stat,
+    geom = GeomFlatViolin,
+    position = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params = list(
+      trim = trim,
+      scale = scale,
+      ...
+    )
+  )
+}
+
+
+
+library(scales)
+library(reshape2)
+my_datal <- melt(ds_rsa, id.vars = c("SubID"), measure.vars = c("CS2minusUSminus_early", "CS2minusUSminus_late", "CS2plusUSplus_early", "CS2plusUSplus_late", "CS2nUSminus_early", "CS2nUSminus_late", "CS2nUSplus_early", "CS2nUSplus_late"), variable.name = "CS", value.name = "PatternSimilarity")
+
+raincloud_theme = theme(
+text = element_text(size = 30),
+#axis.title.x = element_text(size = 16),
+axis.title.y = element_text(size = 28),
+axis.title.x = element_blank(),
+axis.text = element_text(size = 30),
+axis.text.x = element_text(color="black", 
+                           size=20, angle=45, vjust = 0.5),
+axis.text.y = element_text(color="black", 
+                           size=20, angle=0),
+axis.ticks.length = unit(5, "pt"),
+panel.border = element_blank(),
+panel.grid.minor = element_blank(),
+panel.grid.major = element_blank(),
+axis.line.x = element_line(colour = 'black', size=1, linetype='solid'),
+axis.line.y = element_line(colour = 'black', size=1, linetype='solid'))
+
+lb <- function(x) sd(x) / sqrt(29)
+ub <- function(x) sd(x) / sqrt(29)
+
+
+sumld<- ddply(my_datal, ~CS, summarise, mean = mean(PatternSimilarity), median = median(PatternSimilarity), lower = lb(PatternSimilarity), upper = ub(PatternSimilarity))
+
+scaleFUN <- function(x) sprintf("%.2f", x)
+
+g <- ggplot(data = my_datal, aes(y = PatternSimilarity, x = CS, fill = CS)) +
+geom_flat_violin(position = position_nudge(x = .30, y = 0), alpha = .8, adjust =2) +
+#geom_boxplot(aes(x = as.numeric(CS)+0.25, y = PatternSimilarity), width = .1, guides = FALSE, outlier.shape = NA, alpha = .1, colour = "BLACK", size = 1.15) +
+geom_point(aes(y = PatternSimilarity, color = CS), position = position_jitter(width = .10), size = 3.5, alpha = 0.5, colour = "BLACK") +
+geom_point(data = sumld, aes(x = CS, y = mean), position = position_nudge(.25), colour = "BLACK", size = 4.5)+
+geom_errorbar(data = sumld, aes(x = CS, y = mean, ymin = mean-lower, ymax = mean+upper), position = position_nudge(.25), colour = "BLACK", width = 0.1, size = 0.8)+
+geom_hline(yintercept=0, linetype="dashed", 
+                color = "black", size=1) +
+xlab('CS')+ylab('Pattern Similarity')+
+expand_limits(x = 4.5) +
+guides(fill = FALSE) +
+guides(color = FALSE) +
+#scale_color_brewer(palette = "Dark2") +
+#scale_fill_brewer(palette = "Dark2") +
+#coord_flip() +
+theme_bw() +
+raincloud_theme +
+scale_y_continuous(labels = scaleFUN) #+ 
+
+# Rename / Change tick mark labels
+g <- g + scale_x_discrete(breaks=c("CS2minusUSminus_early", "CS2minusUSminus_late", "CS2plusUSplus_early", "CS2plusUSplus_late", "CS2nUSminus_early", "CS2nUSminus_late", "CS2nUSplus_early", "CS2nUSplus_late"),
+
+        labels=c((expression(paste("CS"[2]^-{}, "-" ,"US"^-{}, "early"))),
+                 (expression(paste("CS"[2]^-{}, "-" ,"US"^-{}, "late"))),
+                 (expression(paste("CS"[2]^+{}, "-" ,"US"^+{}, "early"))),
+                 (expression(paste("CS"[2]^+{}, "-" ,"US"^+{}, "late"))),
+                 (expression(paste("CS"[2]^n, "-" ,"US"^-{}, "early"))),
+                 (expression(paste("CS"[2]^n, "-" ,"US"^-{}, "late"))),
+                 (expression(paste("CS"[2]^n, "-" ,"US"^+{}, "early"))),
+                 (expression(paste("CS"[2]^n, "-" ,"US"^+{}, "late")))))
+                                   
+
+
+g + scale_fill_manual(values=c("#2A5078", "#2A5078", "#FFD653", "#FFD653", "#ADB9BA", "#ADB9BA", "#FDE6BB", "#FDE6BB"))
+ggsave('/Users/lennart/Desktop/savage/plots/rainclouds/rsa_CS2.png', width = w, height = h, dpi = 1200)
+
+```
+
+
+##raincloud plots rsa results FOC
+```{r}
+
+w = 15
+h = 7
+
+
+packages <- c("ggplot2", "dplyr", "lavaan", "plyr", "cowplot", "rmarkdown", 
+              "readr", "caTools", "bitops")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())))  
+}
+
+
+library(cowplot)
+library(dplyr)
+library(readr)
+source("/Users/lennart/Desktop/savage/plots/rainclouds/R_rainclouds.R")
+
+
+# Defining the geom_flat_violin function ----
+
+"%||%" <- function(a, b) {
+  if (!is.null(a)) a else b
+}
+
+geom_flat_violin <- function(mapping = NULL, data = NULL, stat = "ydensity",
+                             position = "dodge", trim = TRUE, scale = "area",
+                             show.legend = NA, inherit.aes = TRUE, ...) {
+  layer(
+    data = data,
+    mapping = mapping,
+    stat = stat,
+    geom = GeomFlatViolin,
+    position = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params = list(
+      trim = trim,
+      scale = scale,
+      ...
+    )
+  )
+}
+
+
+
+library(scales)
+library(reshape2)
+my_datal <- melt(ds_rsa, id.vars = c("SubID"), measure.vars = c("CS1minusUSminus_early", "CS1minusUSminus_late", "CS1plusUSplus_early", "CS1plusUSplus_late", "CS1nUSminus_early", "CS1nUSminus_late", "CS1nUSplus_early", "CS1nUSplus_late"), variable.name = "CS", value.name = "PatternSimilarity")
+
+raincloud_theme = theme(
+text = element_text(size = 30),
+#axis.title.x = element_text(size = 16),
+axis.title.y = element_text(size = 28),
+axis.title.x = element_blank(),
+axis.text = element_text(size = 30),
+axis.text.x = element_text(color="black", 
+                           size=20, angle=45, vjust = 0.5),
+axis.text.y = element_text(color="black", 
+                           size=20, angle=0),
+axis.ticks.length = unit(5, "pt"),
+panel.border = element_blank(),
+panel.grid.minor = element_blank(),
+panel.grid.major = element_blank(),
+axis.line.x = element_line(colour = 'black', size=1, linetype='solid'),
+axis.line.y = element_line(colour = 'black', size=1, linetype='solid'))
+
+lb <- function(x) sd(x) / sqrt(29)
+ub <- function(x) sd(x) / sqrt(29)
+
+
+sumld<- ddply(my_datal, ~CS, summarise, mean = mean(PatternSimilarity), median = median(PatternSimilarity), lower = lb(PatternSimilarity), upper = ub(PatternSimilarity))
+
+scaleFUN <- function(x) sprintf("%.2f", x)
+
+
+
+g <- ggplot(data = my_datal, aes(y = PatternSimilarity, x = CS, fill = CS)) +
+geom_flat_violin(position = position_nudge(x = .30, y = 0), alpha = .8, adjust =2) +
+#geom_boxplot(aes(x = as.numeric(CS)+0.25, y = PatternSimilarity), width = .1, guides = FALSE, outlier.shape = NA, alpha = .1, colour = "BLACK", size = 1.15) +
+geom_point(aes(y = PatternSimilarity, color = CS), position = position_jitter(width = .10), size = 3.5, alpha = 0.5, colour = "BLACK") +
+geom_point(data = sumld, aes(x = CS, y = mean), position = position_nudge(.25), colour = "BLACK", size = 4.5)+  
+geom_errorbar(data = sumld, aes(x = CS, y = mean, ymin = mean-lower, ymax = mean+upper), position = position_nudge(.25), colour = "BLACK", width = 0.1, size = 0.8)+
+geom_hline(yintercept=0, linetype="dashed", 
+                color = "black", size=1) +
+xlab('CS')+ylab('Pattern Similarity')+
+expand_limits(x = 4.5) +
+guides(fill = FALSE) +
+guides(color = FALSE) +
+#scale_color_brewer(palette = "Dark2") +
+#scale_fill_brewer(palette = "Dark2") +
+#coord_flip() +
+theme_bw() +
+raincloud_theme +
+scale_y_continuous(labels = scaleFUN) #+ 
+#add HPDI
+#geom_segment(aes(x = .75, y = HDI1[1], xend = 1.75, yend = HDI1[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = .75, y = HDI1[2], xend = 1.75, yend = HDI1[2]), color = "darkred", size=1) +
+#geom_segment(aes(x = 1.75, y = HDI2[1], xend = 2.75, yend = HDI2[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = 1.75, y = HDI2[2], xend = 2.75, yend = HDI2[2]), color = "darkred", size=1) +
+#geom_segment(aes(x = 2.75, y = HDI3[1], xend = 3.75, yend = HDI3[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = 2.75, y = HDI3[2], xend = 3.75, yend = HDI3[2]), color = "darkred", size=1) +
+#geom_segment(aes(x = 3.75, y = HDI4[1], xend = 4.75, yend = HDI4[1]), color = "darkred", size=1) + 
+#geom_segment(aes(x = 3.75, y = HDI4[2], xend = 4.75, yend = HDI4[2]), color = "darkred", size=1) 
+
+# Rename / Change tick mark labels
+g <- g + scale_x_discrete(breaks=c("CS1minusUSminus_early", "CS1minusUSminus_late", "CS1plusUSplus_early", "CS1plusUSplus_late", "CS1nUSminus_early", "CS1nUSminus_late", "CS1nUSplus_early", "CS1nUSplus_late"),
+
+        labels=c((expression(paste("CS"[1]^-{}, "-" ,"US"^-{}, "early"))),
+                 (expression(paste("CS"[1]^-{}, "-" ,"US"^-{}, "late"))),
+                 (expression(paste("CS"[1]^+{}, "-" ,"US"^+{}, "early"))),
+                 (expression(paste("CS"[1]^+{}, "-" ,"US"^+{}, "late"))),
+                 (expression(paste("CS"[1]^n, "-" ,"US"^-{}, "early"))),
+                 (expression(paste("CS"[1]^n, "-" ,"US"^-{}, "late"))),
+                 (expression(paste("CS"[1]^n, "-" ,"US"^+{}, "early"))),
+                 (expression(paste("CS"[1]^n, "-" ,"US"^+{}, "late")))))
+                                   
+
+
+g + scale_fill_manual(values=c("#2A5078", "#2A5078", "#FFD653", "#FFD653", "#ADB9BA", "#ADB9BA", "#FDE6BB", "#FDE6BB"))
+#ggsave('/Users/lennart/Desktop/savage/plots/rainclouds/rsa_CS1.png', width = w, height = h, dpi = 1200)
+
+```
+
+
+
+
+##raincloud plots rsa results SOC - normalized
+```{r}
+
+w = 10
+h = 8
+
+
+packages <- c("ggplot2", "dplyr", "lavaan", "plyr", "cowplot", "rmarkdown", 
+              "readr", "caTools", "bitops")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())))  
+}
+
+
+library(cowplot)
+library(dplyr)
+library(readr)
+source("/Users/lennart/Desktop/savage/plots/rainclouds/R_rainclouds.R")
+
+
+# Defining the geom_flat_violin function ----
+
+"%||%" <- function(a, b) {
+  if (!is.null(a)) a else b
+}
+
+geom_flat_violin <- function(mapping = NULL, data = NULL, stat = "ydensity",
+                             position = "dodge", trim = TRUE, scale = "area",
+                             show.legend = NA, inherit.aes = TRUE, ...) {
+  layer(
+    data = data,
+    mapping = mapping,
+    stat = stat,
+    geom = GeomFlatViolin,
+    position = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params = list(
+      trim = trim,
+      scale = scale,
+      ...
+    )
+  )
+}
+
+
+
+library(scales)
+library(reshape2)
+my_datal <- melt(ds_rsa_norm, id.vars = c("SubID"), measure.vars = c("CS2minusUSminus_early", "CS2minusUSminus_late", "CS2plusUSplus_early", "CS2plusUSplus_late"), variable.name = "CS", value.name = "PatternSimilarity")
+
+raincloud_theme = theme(
+text = element_text(size = 30),
+#axis.title.x = element_text(size = 16),
+axis.title.y = element_text(size = 36),
+axis.title.x = element_blank(),
+axis.text = element_text(size = 30),
+axis.text.x = element_text(color="black", 
+                           size=30, angle=45, vjust = 0.5),
+axis.text.y = element_text(color="black", 
+                           size=30, angle=0),
+axis.ticks.length.y = unit(5, "pt"),
+axis.ticks.length.x = unit(0, "pt"),
+panel.border = element_blank(),
+panel.grid.minor = element_blank(),
+panel.grid.major = element_blank(),
+axis.line.x = element_line(colour = 'black', size=1, linetype='solid'),
+axis.line.y = element_line(colour = 'black', size=1, linetype='solid'))
+
+lb <- function(x) sd(x) / sqrt(29)
+ub <- function(x) sd(x) / sqrt(29)
+
+
+sumld<- ddply(my_datal, ~CS, summarise, mean = mean(PatternSimilarity), median = median(PatternSimilarity), lower = lb(PatternSimilarity), upper = ub(PatternSimilarity))
+
+scaleFUN <- function(x) sprintf("%.2f", x)
+my_comparisons <- list( c("CS2minusUSminus_early", "CS2minusUSminus_late"), c("CS2plusUSplus_early", "CS2plusUSplus_late"))
+
+g <- ggplot(data = my_datal, aes(y = PatternSimilarity, x = CS, fill = CS)) +
+geom_flat_violin(position = position_nudge(x = .25, y = 0), alpha = .8, adjust =2) +
+#geom_boxplot(aes(x = as.numeric(CS)+0.25, y = PatternSimilarity), width = .1, guides = FALSE, outlier.shape = NA, alpha = .1, colour = "BLACK", size = 1.15) +
+geom_point(aes(y = PatternSimilarity, color = CS), position = position_jitter(width = .125), size = 3.5, alpha = 0.5, colour = "BLACK") +
+geom_point(data = sumld, aes(x = CS, y = mean), position = position_nudge(.25), colour = "BLACK", size = 4.5)+
+geom_errorbar(data = sumld, aes(x = CS, y = mean, ymin = mean-lower, ymax = mean+upper), position = position_nudge(.25), colour = "BLACK", width = 0.1, size = 0.8)+
+geom_hline(yintercept=0, linetype="dashed", 
+                color = "black", size=1) +
+xlab('CS')+ylab('Pattern Similarity')+
+expand_limits(x = 4.5) +
+guides(fill = FALSE) +
+guides(color = FALSE) +
+#scale_color_brewer(palette = "Dark2") +
+#scale_fill_brewer(palette = "Dark2") +
+#coord_flip() +
+theme_bw() +
+raincloud_theme +
+scale_y_continuous(labels = scaleFUN) #+ 
+#ylim(-.12, .10)
+
+
+# Rename / Change tick mark labels
+g <- g + scale_x_discrete(breaks=c("CS2minusUSminus_early", "CS2minusUSminus_late", "CS2plusUSplus_early", "CS2plusUSplus_late"),
+
+        labels=c((expression(paste("CS"[2]^-{}, "-" ,"US"^-{}, "early"))),
+                 (expression(paste("CS"[2]^-{}, "-" ,"US"^-{}, "late"))),
+                 (expression(paste("CS"[2]^+{}, "-" ,"US"^+{}, "early"))),
+                 (expression(paste("CS"[2]^+{}, "-" ,"US"^+{}, "late")))))
+                                   
+
+
+g + scale_fill_manual(values=c("#2A5078", "#2A5078", "#FFD653", "#FFD653")) +
+stat_compare_means(comparisons = my_comparisons, label = "p.signif", paired = TRUE, method = "t.test", label.y = .15, hide.ns = TRUE)
+
+ggsave('/Users/lennart/Desktop/savage/plots/rainclouds/rsa_CS2_normalized_reduced.png', width = w, height = h, dpi = 150)
+```
+
+
+##raincloud plots rsa results FOC - normalized
+```{r}
+
+w = 10
+h = 8
+
+
+packages <- c("ggplot2", "dplyr", "lavaan", "plyr", "cowplot", "rmarkdown", 
+              "readr", "caTools", "bitops")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())))  
+}
+
+
+library(cowplot)
+library(dplyr)
+library(readr)
+source("/Users/lennart/Desktop/savage/plots/rainclouds/R_rainclouds.R")
+library(ggpubr)
+
+
+# Defining the geom_flat_violin function ----
+
+"%||%" <- function(a, b) {
+  if (!is.null(a)) a else b
+}
+
+geom_flat_violin <- function(mapping = NULL, data = NULL, stat = "ydensity",
+                             position = "dodge", trim = TRUE, scale = "area",
+                             show.legend = NA, inherit.aes = TRUE, ...) {
+  layer(
+    data = data,
+    mapping = mapping,
+    stat = stat,
+    geom = GeomFlatViolin,
+    position = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params = list(
+      trim = trim,
+      scale = scale,
+      ...
+    )
+  )
+}
+
+
+
+library(scales)
+library(reshape2)
+my_datal <- melt(ds_rsa_norm, id.vars = c("SubID"), measure.vars = c("CS1minusUSminus_early", "CS1minusUSminus_late", "CS1plusUSplus_early", "CS1plusUSplus_late"), variable.name = "CS", value.name = "PatternSimilarity")
+
+raincloud_theme = theme(
+text = element_text(size = 30),
+#axis.title.x = element_text(size = 16),
+axis.title.y = element_text(size = 36),
+axis.title.x = element_blank(),
+axis.text = element_text(size = 30),
+axis.text.x = element_text(color="black", 
+                           size=30, angle=45, vjust = 0.5),
+axis.text.y = element_text(color="black", 
+                           size=30, angle=0),
+axis.ticks.length.y = unit(5, "pt"),
+axis.ticks.length.x = unit(0, "pt"),
+panel.border = element_blank(),
+panel.grid.minor = element_blank(),
+panel.grid.major = element_blank(),
+axis.line.x = element_line(colour = 'black', size=1, linetype='solid'),
+axis.line.y = element_line(colour = 'black', size=1, linetype='solid'))
+
+
+lb <- function(x) sd(x) / sqrt(29)
+ub <- function(x) sd(x) / sqrt(29)
+
+
+sumld<- ddply(my_datal, ~CS, summarise, mean = mean(PatternSimilarity), median = median(PatternSimilarity), lower = lb(PatternSimilarity), upper = ub(PatternSimilarity))
+
+scaleFUN <- function(x) sprintf("%.2f", x)
+my_comparisons <- list( c("CS1minusUSminus_early", "CS1minusUSminus_late"), c("CS1plusUSplus_early", "CS1plusUSplus_late"))
+
+g <- ggplot(data = my_datal, aes(y = PatternSimilarity, x = CS, fill = CS)) +
+geom_flat_violin(position = position_nudge(x = .25, y = 0), alpha = .8, adjust =2) +
+#geom_boxplot(aes(x = as.numeric(CS)+0.25, y = PatternSimilarity), width = .1, guides = FALSE, outlier.shape = NA, alpha = .1, colour = "BLACK", size = 1.15) +
+geom_point(aes(y = PatternSimilarity, color = CS), position = position_jitter(width = .125), size = 3.5, alpha = 0.5, colour = "BLACK") +
+geom_point(data = sumld, aes(x = CS, y = mean), position = position_nudge(.25), colour = "BLACK", size = 4.5)+
+geom_errorbar(data = sumld, aes(x = CS, y = mean, ymin = mean-lower, ymax = mean+upper), position = position_nudge(.25), colour = "BLACK", width = 0.1, size = 0.8)+
+geom_hline(yintercept=0, linetype="dashed", 
+                color = "black", size=1) +
+xlab('CS')+ylab('Pattern Similarity')+
+expand_limits(x = 4.5) +
+guides(fill = FALSE) +
+guides(color = FALSE) +
+#scale_color_brewer(palette = "Dark2") +
+#scale_fill_brewer(palette = "Dark2") +
+#coord_flip() +
+theme_bw() +
+raincloud_theme +
+scale_y_continuous(labels = scaleFUN) #+ 
+
+# Rename / Change tick mark labels
+g <- g + scale_x_discrete(breaks=c("CS1minusUSminus_early", "CS1minusUSminus_late", "CS1plusUSplus_early", "CS1plusUSplus_late"),
+
+        labels=c((expression(paste("CS"[1]^-{}, "-" ,"US"^-{}, "early"))),
+                 (expression(paste("CS"[1]^-{}, "-" ,"US"^-{}, "late"))),
+                 (expression(paste("CS"[1]^+{}, "-" ,"US"^+{}, "early"))),
+                 (expression(paste("CS"[1]^+{}, "-" ,"US"^+{}, "late")))))
+                                   
+
+
+g + scale_fill_manual(values=c("#2A5078", "#2A5078", "#FFD653", "#FFD653")) +
+stat_compare_means(comparisons = my_comparisons, label = "p.signif", paired = TRUE, method = "t.test", label.y = .15, hide.ns = TRUE)
+ggsave('/Users/lennart/Desktop/savage/plots/rainclouds/rsa_CS1_normalized_reduced.png', width = w, height = h, dpi = 150)
+
+```
+
+
+##raincloud plots for decoding accuracy - bias vs no bias
+```{r}
+
+w = 10
+h = 8
+
+
+packages <- c("ggplot2", "dplyr", "lavaan", "plyr", "cowplot", "rmarkdown", 
+              "readr", "caTools", "bitops")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())))  
+}
+
+
+library(cowplot)
+library(dplyr)
+library(readr)
+source("/Users/lennart/Desktop/savage/plots/rainclouds/R_rainclouds.R")
+library(ggpubr)
+
+
+# Defining the geom_flat_violin function ----
+
+"%||%" <- function(a, b) {
+  if (!is.null(a)) a else b
+}
+
+geom_flat_violin <- function(mapping = NULL, data = NULL, stat = "ydensity",
+                             position = "dodge", trim = TRUE, scale = "area",
+                             show.legend = NA, inherit.aes = TRUE, ...) {
+  layer(
+    data = data,
+    mapping = mapping,
+    stat = stat,
+    geom = GeomFlatViolin,
+    position = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params = list(
+      trim = trim,
+      scale = scale,
+      ...
+    )
+  )
+}
+
+
+
+library(scales)
+library(reshape2)
+my_datal <- melt(ds_decoding, id.vars = c("idx", "SubID"), measure.vars = c("Decoding_low", "Decoding_high"), variable.name = "Acc", value.name = "DecodingAcc" )
+
+
+raincloud_theme = theme(
+text = element_text(size = 30),
+#axis.title.x = element_text(size = 16),
+#axis.title.y = element_text(size = 36),
+axis.title.x = element_blank(),
+axis.title.y = element_blank(),
+axis.text = element_text(size = 30),
+axis.text.x = element_text(color="black", 
+                           size=0, angle=0, vjust = 0.5),
+axis.text.y = element_text(color="black", 
+                           size=30, angle=0),
+axis.ticks.length.y = unit(5, "pt"),
+axis.ticks.length.x = unit(0, "pt"),
+panel.border = element_blank(),
+panel.grid.minor = element_blank(),
+panel.grid.major = element_blank(),
+axis.line.x = element_line(colour = 'black', size=1, linetype='solid'),
+axis.line.y = element_line(colour = 'black', size=1, linetype='solid'))
+
+
+lb <- function(x) sd(na.omit(x)) / sqrt(29)
+ub <- function(x) sd(na.omit(x)) / sqrt(29)
+
+
+sumld<- ddply(my_datal, ~Acc, summarise, mean = mean(na.omit(DecodingAcc)), median = median(na.omit(DecodingAcc)), lower = lb(DecodingAcc), upper = ub(DecodingAcc))
+
+scaleFUN <- function(x) sprintf("%.2f", x)
+
+
+g <- ggplot(data = my_datal, aes(y = DecodingAcc, x = Acc, fill = Acc)) +
+geom_flat_violin(position = position_nudge(x = -.10, y = 0), alpha = .8, adjust =2) +
+#geom_boxplot(aes(x = as.numeric(idx)+0.25, y = DecodingAcc), width = .1, guides = FALSE, outlier.shape = NA, alpha = .1, colour = "BLACK", size = 1.15) +
+geom_point(aes(y = DecodingAcc, color = Acc, x = as.numeric(Acc)-0.30), position = position_jitter(width = .1), size = 3.5, alpha = 0.5, colour = "BLACK") +
+geom_point(data = sumld, aes(x = Acc, y = mean), position = position_nudge(-.1), colour = "BLACK", size = 4.5)+
+geom_errorbar(data = sumld, aes(x = Acc, y = mean, ymin = mean-lower, ymax = mean+upper), position = position_nudge(-.1), colour = "BLACK", width = 0.1, size = 0.8)+
+geom_hline(yintercept=0.5, linetype="dashed", 
+                color = "black", size=1) +
+#xlab('Group')+#ylab('Decoding Accuracy')+
+expand_limits(x = 2.5) +
+guides(fill = FALSE) +
+guides(color = FALSE) +
+#scale_color_brewer(palette = "Dark2") +
+#scale_fill_brewer(palette = "Dark2") +
+#coord_flip() +
+theme_bw() +
+raincloud_theme+
+scale_y_continuous(labels = scaleFUN) #+ 
+
+# Rename / Change tick mark labels
+#g <- g + scale_x_discrete(breaks=c("Decoding_low", "Decoding_high"),
+#       labels=c("Low bias", "High bias"))
+
+g + scale_fill_manual(values=c("#AD89BA","#892B64")) #"#AD89BA","#9D4479"
+ggsave('/Users/lennart/Desktop/savage/plots/rainclouds/decoding_bias2.png', width = w, height = h, dpi = 1200)
+
+```
