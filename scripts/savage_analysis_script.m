@@ -818,37 +818,64 @@ pre_fractals = results(:,21:3:29);
 nanmean(pre_fractals)
 nanstd(pre_fractals)
 
-% repeated measures ANOVA on CS subjective value (pre-rating) 
-data = pre_fractals;
-varNames = {'S1','S2','S3'};
+post_fractals = results(:,22:3:29);
+nanmean(post_fractals)
+nanstd(post_fractals)
+
+% repeated measures ANOVA on CS subjective value (pre-rating - post-rating) 
+data = [pre_fractals post_fractals];
+varNames = {'S1pre','S2pre','S3pre','S1post','S2post','S3post'};
 
 t = array2table(data,'VariableNames',varNames);
 
-factorNames = {'stimulus'};
-within = table({'one'; 'two';'three'},'VariableNames',factorNames);
+factorNames = {'stimulus','time'};
+within = table({'one'; 'two';'three';'one'; 'two';'three'},{'pre'; 'pre';'pre';'post'; 'post';'post'},'VariableNames',factorNames);
 
 
-rm = fitrm(t,'S1-S3~1','WithinDesign',within); 
+rm = fitrm(t,'S1pre-S3post~1','WithinDesign',within); 
 
 
-[ranovatbl] = ranova(rm, 'WithinModel', 'stimulus');
+[ranovatbl] = ranova(rm, 'WithinModel', 'stimulus*time');
 
 disp('rmANOVA on fractal ratings')
 ranovatbl
 
-
+%pre differences
 [h,p,ci,stats] = ttest(pre_fractals(:,1),pre_fractals(:,2))
 [h,p,ci,stats] = ttest(pre_fractals(:,1),pre_fractals(:,3))
 [h,p,ci,stats] = ttest(pre_fractals(:,2),pre_fractals(:,3))
 
+%post differences
+[h,p,ci,stats] = ttest(post_fractals(:,1),post_fractals(:,2))
+[h,p,ci,stats] = ttest(post_fractals(:,1),post_fractals(:,3))
+[h,p,ci,stats] = ttest(post_fractals(:,2),post_fractals(:,3))
+
+%pre-post differences
+[h,p,ci,stats] = ttest(post_fractals(:,1),pre_fractals(:,1))
+[h,p,ci,stats] = ttest(post_fractals(:,2),pre_fractals(:,2))
+[h,p,ci,stats] = ttest(post_fractals(:,3),pre_fractals(:,3))
+
+%pre-post differences of differences
+%CS1- vs CS1+
+[h,p,ci,stats] = ttest( (post_fractals(:,1)-pre_fractals(:,1)), (post_fractals(:,2)-pre_fractals(:,2)) )
+
+%CS1- vs CS1n
+[h,p,ci,stats] = ttest( (post_fractals(:,1)-pre_fractals(:,1)), (post_fractals(:,3)-pre_fractals(:,3)) )
+
+%CS1+ vs CS1n
+[h,p,ci,stats] = ttest( (post_fractals(:,2)-pre_fractals(:,2)), (post_fractals(:,3)-pre_fractals(:,3)) )
 
 
 %calculate partial eta square
-disp('rmANOVA effect size of ME stimulus pre')
 cp_data=data(:,1);
-data_rm = [data(:,1) data(:,2) data(:,3)];
+stimulus = [repmat(1,length(cp_data),1);repmat(2,length(cp_data),1);repmat(3,length(cp_data),1);repmat(1,length(cp_data),1);repmat(2,length(cp_data),1);repmat(3,length(cp_data),1)];
+time = [repmat(1,length(cp_data),1);repmat(1,length(cp_data),1);repmat(1,length(cp_data),1);repmat(2,length(cp_data),1);repmat(2,length(cp_data),1);repmat(2,length(cp_data),1)];
 
-mes1way(data_rm,'partialeta2','isDep',1)
+
+data_rm = [data(:,1); data(:,2); data(:,3); data(:,4); data(:,5); data(:,6)];
+
+mes2way(data_rm,[stimulus time],'partialeta2','isDep',[1 1])
+
 
 
 %pre-rating difference of selected CS2
@@ -856,30 +883,64 @@ pre_kanji = results_kanji(:,9:3:17);
 nanmean(pre_kanji)
 nanstd(pre_kanji)
 
-% repeated measures ANOVA on CS subjective value (pre-rating) 
-data = pre_kanji;
-varNames = {'S1','S2','S3'};
+post_kanji = results_kanji(:,10:3:17);
+nanmean(post_kanji)
+nanstd(post_kanji)
+
+
+% repeated measures ANOVA on CS subjective value (pre-rating - post-rating) 
+data = [pre_kanji post_kanji];
+varNames = {'S1pre','S2pre','S3pre','S1post','S2post','S3post'};
 
 t = array2table(data,'VariableNames',varNames);
 
-factorNames = {'stimulus'};
-within = table({'one'; 'two';'three'},'VariableNames',factorNames);
+factorNames = {'stimulus','time'};
+within = table({'one'; 'two';'three';'one'; 'two';'three'},{'pre'; 'pre';'pre';'post'; 'post';'post'},'VariableNames',factorNames);
 
 
-rm = fitrm(t,'S1-S3~1','WithinDesign',within); 
+rm = fitrm(t,'S1pre-S3post~1','WithinDesign',within); 
 
 
-[ranovatbl] = ranova(rm, 'WithinModel', 'stimulus');
+[ranovatbl] = ranova(rm, 'WithinModel', 'stimulus*time');
 
-disp('rmANOVA on kanjis ratings')
+disp('rmANOVA on kanji ratings')
 ranovatbl
 
-%calculate partial eta square 
-disp('overall choice probability rmANOVA effect size of ME stimulus pre')
-cp_data=data(:,1);
-data_rm = [data(:,1) data(:,2) data(:,3)];
 
-mes1way(data_rm,'partialeta2','isDep',1)
+%calculate partial eta square
+cp_data=data(:,1);
+stimulus = [repmat(1,length(cp_data),1);repmat(2,length(cp_data),1);repmat(3,length(cp_data),1);repmat(1,length(cp_data),1);repmat(2,length(cp_data),1);repmat(3,length(cp_data),1)];
+time = [repmat(1,length(cp_data),1);repmat(1,length(cp_data),1);repmat(1,length(cp_data),1);repmat(2,length(cp_data),1);repmat(2,length(cp_data),1);repmat(2,length(cp_data),1)];
+
+
+data_rm = [data(:,1); data(:,2); data(:,3); data(:,4); data(:,5); data(:,6)];
+
+mes2way(data_rm,[stimulus time],'partialeta2','isDep',[1 1])
+
+%pre differences
+[h,p,ci,stats] = ttest(pre_kanji(:,1),pre_kanji(:,2))
+[h,p,ci,stats] = ttest(pre_kanji(:,1),pre_kanji(:,3))
+[h,p,ci,stats] = ttest(pre_kanji(:,2),pre_kanji(:,3))
+
+%post differences
+[h,p,ci,stats] = ttest(post_kanji(:,1),post_kanji(:,2))
+[h,p,ci,stats] = ttest(post_kanji(:,1),post_kanji(:,3))
+[h,p,ci,stats] = ttest(post_kanji(:,2),post_kanji(:,3))
+
+%pre-post differences
+[h,p,ci,stats] = ttest(post_kanji(:,1),pre_kanji(:,1))
+[h,p,ci,stats] = ttest(post_kanji(:,2),pre_kanji(:,2))
+[h,p,ci,stats] = ttest(post_kanji(:,3),pre_kanji(:,3))
+
+%pre-post differences of differences
+%CS2- vs CS2+
+[h,p,ci,stats] = ttest( (post_kanji(:,1)-pre_kanji(:,1)), (post_kanji(:,2)-pre_kanji(:,2)) )
+
+%CS2- vs CS2n
+[h,p,ci,stats] = ttest( (post_kanji(:,1)-pre_kanji(:,1)), (post_kanji(:,3)-pre_kanji(:,3)) )
+
+%CS2+ vs CS2n
+[h,p,ci,stats] = ttest( (post_kanji(:,2)-pre_kanji(:,2)), (post_kanji(:,3)-pre_kanji(:,3)) )
 
 
 %% US ratings (valence) - learning experiment
@@ -956,7 +1017,7 @@ if sample ~= 1
 end
 
 
-%% plot rating (Supplementary Fig. 2)
+%% plot rating
 cols = [];
 
 cols.k = [0 0 0];
