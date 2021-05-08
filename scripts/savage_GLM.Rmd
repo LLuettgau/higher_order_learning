@@ -30,8 +30,6 @@ library(RColorBrewer)
 library(reshape2)
 library(bayestestR)
 
-library(gridExtra)
-
 
 ```
 
@@ -80,10 +78,7 @@ ds_tbt$group <- ifelse( ds_tbt$SubID < 900 , 1L , 2L )
 head(ds_tbt, 10)
 
 
-
-
 ```
-
 
 #Regression model on all CS choice probabilities, trial-by-trial
 ```{r}
@@ -106,8 +101,6 @@ reg_flat <- ulam(
 
 
 precis( reg_flat, depth=2)
-traceplot( reg_flat )
-trankplot( reg_flat , n_cols= 3 )
 
 #flat regression, no varying intercepts, but CS-specific effects
 reg_flat_CS <- ulam(
@@ -123,8 +116,6 @@ reg_flat_CS <- ulam(
 
 #parameter estimates
 precis( reg_flat_CS , depth=2)
-traceplot( reg_flat_CS )
-trankplot( reg_flat_CS , n_cols= 3 )
 
 #group model, no CS-specific effects
 reg_group <- ulam(
@@ -140,8 +131,7 @@ reg_group <- ulam(
 
 #parameter estimates
 precis( reg_group , depth=2)
-traceplot( reg_group )
-trankplot( reg_group , n_cols= 3 )
+
 
 #group model, with CS-specific effects, correlated slopes
 reg_group_CS_corr <- ulam(
@@ -165,8 +155,7 @@ reg_group_CS_corr <- ulam(
 
 #parameter estimates
 precis( reg_group_CS_corr , depth=3)
-traceplot( reg_group_CS_corr )
-trankplot( reg_group_CS_corr , n_cols= 3 )
+
 
 #varying intercepts and CS effect regression correlated slopes
 reg_var_int_CS_corr <- ulam(
@@ -189,8 +178,8 @@ reg_var_int_CS_corr <- ulam(
 
 #parameter estimates
 precis( reg_var_int_CS_corr , depth=3)
-traceplot( reg_var_int_CS_corr )
-trankplot( reg_var_int_CS_corr , n_cols= 3 )
+#traceplot( reg_var_int_CS_corr )
+#trankplot( reg_var_int_CS_corr , n_cols= 3 )
 
 #varying intercepts, group intercepts and CS effect regression, correlated slopes
 reg_var_int_CS_group_corr <- ulam(
@@ -220,13 +209,12 @@ reg_var_int_CS_group_corr <- ulam(
 
 #parameter estimates
 precis( reg_var_int_CS_group_corr , depth=3)
-traceplot( reg_var_int_CS_group_corr )
-trankplot( reg_var_int_CS_group_corr , n_cols= 3 )
+
 
 #model comparison
 compare(reg_flat, reg_flat_CS, reg_group, reg_group_CS_corr, reg_var_int_CS_corr, reg_var_int_CS_group_corr, func = PSIS)
 
-
+compare(reg_flat, reg_flat_CS, reg_group, reg_group_CS_corr, reg_var_int_CS_corr, reg_var_int_CS_group_corr, func=WAIC)
 
 #extract posterior samples from best-fitting model
 post_cs <- extract.samples( reg_var_int_CS_corr ) 
@@ -263,21 +251,6 @@ rope(inv_logit( post_cs$d[,3] ), range = c(.45, .55))
 rope(inv_logit( post_cs$d[,4] ), range = c(.45, .55))
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
